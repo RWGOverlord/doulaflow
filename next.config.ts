@@ -1,11 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
+  allowedDevOrigins: ['192.168.0.106'],
+  experimental: {
+    // silence the middleware deprecation for now
   },
 };
 

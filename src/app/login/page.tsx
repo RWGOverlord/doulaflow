@@ -1,17 +1,32 @@
 // src/app/login/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
+
+  // Listen for auth state change and redirect when session is ready
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          console.log("signed in")
+          router.replace('/clients');
+        }
+      }
+    );
+    return () => subscription.unsubscribe();
+  }, [router]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -23,19 +38,14 @@ export default function LoginPage() {
     if (error) {
       setError('Invalid email or password. Please try again.');
       setLoading(false);
-      return;
     }
-
-    // Give the session a moment to propagate then hard redirect
-    await new Promise(r => setTimeout(r, 500));
-    window.location.replace('/clients');
+    // Don't setLoading(false) on success — keep button disabled until redirect fires
   }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
 
-        {/* Logo */}
         <div className="text-center mb-8">
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             DoulaFlow
@@ -45,7 +55,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Card */}
         <div className="rounded-xl border bg-background shadow-sm px-6 py-8">
           <form onSubmit={handleLogin} className="space-y-4">
 
