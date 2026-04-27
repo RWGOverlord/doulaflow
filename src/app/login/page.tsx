@@ -4,44 +4,31 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router  = useRouter();
+  const { user, loading } = useAuth();
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [error,    setError]    = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  // NEW: Check if user is already signed in when the page loads
+  // If already logged in, redirect immediately
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.replace('/clients');
-      }
-    });
-
-    // Keep your listener as a safety net for other auth events
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          console.log("Signed in via listener");
-          router.replace('/clients');
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, [router]);
+    if (!loading && user) {
+      router.replace('/clients');
+    }
+  }, [user, loading, router]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setSubmitting(true);
 
-    // CHANGED: destructure data too + redirect immediately on success
     const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -49,70 +36,43 @@ export default function LoginPage() {
 
     if (authError) {
       setError('Invalid email or password. Please try again.');
-      setLoading(false);
-    } else {
-      // This is the reliable redirect
-      console.log("✅ Login successful – redirecting");
-      router.replace('/clients');
-      // No need to setLoading(false) – we're navigating away
+      setSubmitting(false);
     }
+    // AuthProvider's onAuthStateChange will update user state,
+    // which triggers the useEffect above to redirect
   }
 
-  // ... rest of your JSX is unchanged
+  if (loading) return null;
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            DoulaFlow
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Sign in to your practice
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">DoulaFlow</h1>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to your practice</p>
         </div>
-
         <div className="rounded-xl border bg-background shadow-sm px-6 py-8">
           <form onSubmit={handleLogin} className="space-y-4">
-
             {error && (
               <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2.5 text-sm text-destructive">
                 {error}
               </div>
             )}
-
             <div className="space-y-1.5">
               <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoFocus
-              />
+              <Input id="email" type="email" placeholder="you@email.com"
+                value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
             </div>
-
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-              />
+              <Input id="password" type="password" placeholder="••••••••"
+                value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign In'}
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? 'Signing in…' : 'Sign In'}
             </Button>
-
           </form>
         </div>
-
       </div>
     </div>
   );

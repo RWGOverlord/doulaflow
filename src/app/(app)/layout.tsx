@@ -1,8 +1,31 @@
 // src/app/(app)/layout.tsx
-import { Suspense } from "react";
-import { SidebarNav } from "@/components/SidebarNav";
+'use client';
+
+import { Suspense, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { SidebarNav } from '@/components/SidebarNav';
+import { useAuth } from '@/lib/auth-context';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace('/login');
+    }
+  }, [user, loading, router]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
   return (
     <div className="flex h-screen overflow-hidden">
       <SidebarNav />
