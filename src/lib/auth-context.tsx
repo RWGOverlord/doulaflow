@@ -6,70 +6,75 @@ import { supabase } from '@/lib/supabaseClient';
 import type { User } from '@supabase/supabase-js';
 
 type AuthUser = {
-  id:     string;
-  email:  string;
-  name:   string;
-  orgId:  string;
-  role:   string;
+  id:    string;
+  email: string;
+  name:  string;
+  orgId: string;
+  role:  string;
 };
 
 type AuthContextType = {
-  user:       AuthUser | null;
-  loading:    boolean;
-  signOut:    () => Promise<void>;
+  user:    AuthUser | null;
+  loading: boolean;
+  signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType>({
-  user:    null,
-  loading: true,
-  signOut: async () => {},
+  user: null, loading: true, signOut: async () => {},
 });
+
+async function loadProfile(authUser: User): Promise<AuthUser | null> {
+  const { data } = await supabase
+    .from('users')
+    .select('id, email, name, role, org_id')
+    .eq('id', authUser.id)
+    .single();
+
+  if (!data) return null;
+  return {
+    id:    data.id,
+    email: data.email,
+    name:  data.name ?? '',
+    orgId: data.org_id,
+    role:  data.role,
+  };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]       = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  async function loadProfile(authUser: User) {
-    const { data } = await supabase
-      .from('users')
-      .select('id, email, name, role, org_id')
-      .eq('id', authUser.id)
-      .single();
-
-    if (data) {
-      setUser({
-        id:    data.id,
-        email: data.email,
-        name:  data.name ?? '',
-        orgId: data.org_id,
-        role:  data.role,
-      });
-    }
-  }
-
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    let mounted = true;
+
+    // Get initial session immediately
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
       if (session?.user) {
-        loadProfile(session.user).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
+        const profile = await loadProfile(session.user);
+        if (mounted) setUser(profile);
       }
+      if (mounted) setLoading(false);
     });
 
-    // Listen for auth changes
+    // Listen for auth changes (login/logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        if (!mounted) return;
         if (session?.user) {
-          await loadProfile(session.user);
+          const profile = await loadProfile(session.user);
+          if (mounted) setUser(profile);
         } else {
-          setUser(null);
+          if (mounted) setUser(null);
         }
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function signOut() {

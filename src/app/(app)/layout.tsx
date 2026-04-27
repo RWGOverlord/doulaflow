@@ -16,14 +16,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
+  // Show skeleton while session is rehydrating
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="text-sm text-muted-foreground">Loading…</div>
+      <div className="flex h-screen overflow-hidden">
+        <div className="w-56 border-r bg-background shrink-0" />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
       </div>
     );
   }
 
+  // No user after loading done — redirect fires via useEffect
   if (!user) return null;
 
   return (
