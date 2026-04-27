@@ -29,23 +29,22 @@ export const CLIENT_STATUSES = [
 
 export type ClientStatus = typeof CLIENT_STATUSES[number];
 
-// ─── Form schema (used in New Client wizard + Edit) ───────────────────────────
+// ─── Form schema ──────────────────────────────────────────────────────────────
 
 export const clientSchema = z.object({
   name:             z.string().min(1, 'Name is required'),
-  invited_email:    z.string().email('Invalid email').nullable().or(z.literal('')),
-  partner_name:     z.string().nullable(),
-  phone:            z.string().nullable(),
-  address_city:     z.string().nullable(),
-  status:           z.string().default('Onboarding'),
+  invited_email:    z.string().email('Invalid email').or(z.literal('')).optional(),
+  partner_name:     z.string().optional(),
+  phone:            z.string().optional(),
+  address_city:     z.string().optional(),
+  status:           z.string().min(1).default('Onboarding'),
   service_types:    z.array(z.string()).default([]),
-  due_date:         z.string().nullable(),
-  lmp:              z.string().nullable(),
-  pregnancy_stage:  z.string().nullable(),
-  risk_notes:       z.string().nullable(),
-  notes:            z.string().nullable(),
-  // Package assignment (handled separately via client_packages table)
-  package_id:       z.string().uuid().nullable().optional(),
+  due_date:         z.string().optional(),
+  lmp:              z.string().optional(),
+  pregnancy_stage:  z.string().optional(),
+  risk_notes:       z.string().optional(),
+  notes:            z.string().optional(),
+  package_id:       z.string().uuid().optional(),
 });
 
 export type ClientFormValues = z.infer<typeof clientSchema>;
