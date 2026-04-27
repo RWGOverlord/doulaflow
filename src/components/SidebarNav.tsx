@@ -1,14 +1,14 @@
 // src/components/SidebarNav.tsx
 "use client";
 
-import { useMemo, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useMemo } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Users, Package, Calendar, FileText,
-  BarChart2, Settings, Activity,
+  BarChart2, Settings, Activity, LogOut,
 } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/lib/auth-context";
 
 const navItems = [
   { href: "/clients",   label: "Clients",   icon: Users },
@@ -21,36 +21,25 @@ const navItems = [
 ];
 
 function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map(p => p[0]?.toUpperCase() ?? '')
-    .join('');
+  return name.split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() ?? '').join('');
 }
 
 export function SidebarNav() {
-  const pathname = usePathname();
-  const [userName, setUserName] = useState<string | null>(null);
+  const pathname  = usePathname();
+  const router    = useRouter();
+  const { user, signOut } = useAuth();
 
   const section = useMemo(() => {
     const seg = pathname?.split("/").filter(Boolean)[0] ?? "";
     return `/${seg}`;
   }, [pathname]);
 
-  useEffect(() => {
-    const userId = process.env.NEXT_PUBLIC_USER_ID;
-    if (!userId) return;
-    supabase
-      .from('users')
-      .select('name')
-      .eq('id', userId)
-      .single()
-      .then(({ data }) => {
-        if (data?.name) setUserName(data.name);
-      });
-  }, []);
+  async function handleSignOut() {
+    await signOut();
+    router.push('/login');
+  }
 
-  const displayName     = userName ?? 'Doula';
+  const displayName     = user?.name ?? 'Doula';
   const displayInitials = initials(displayName);
 
   return (
@@ -87,16 +76,23 @@ export function SidebarNav() {
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t">
+      <div className="p-3 border-t space-y-1">
         <div className="flex items-center gap-2 px-2 py-1.5 rounded-md">
           <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
             {displayInitials}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="text-sm font-medium text-foreground truncate">{displayName}</div>
-            <div className="text-xs text-muted-foreground">Doula</div>
+            <div className="text-xs text-muted-foreground truncate">{user?.email ?? ''}</div>
           </div>
         </div>
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+          Sign out
+        </button>
       </div>
     </aside>
   );
