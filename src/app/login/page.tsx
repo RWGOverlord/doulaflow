@@ -26,8 +26,9 @@ export default function LoginPage() {
       return;
     }
 
-    // Full page reload so middleware picks up the new session cookie
-    window.location.href = '/clients';
+    // Give the session a moment to propagate then hard redirect
+    await new Promise(r => setTimeout(r, 500));
+    window.location.replace('/clients');
   }
 
   return (
@@ -79,11 +80,7 @@ export default function LoginPage() {
               />
             </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={loading}
-            >
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Signing in…' : 'Sign In'}
             </Button>
 
