@@ -15,16 +15,24 @@ export default function LoginPage() {
   const [error,    setError]    = useState<string | null>(null);
   const [loading,  setLoading]  = useState(false);
 
-  // Listen for auth state change and redirect when session is ready
+  // NEW: Check if user is already signed in when the page loads
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace('/clients');
+      }
+    });
+
+    // Keep your listener as a safety net for other auth events
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === 'SIGNED_IN' && session) {
-          console.log("signed in")
+          console.log("Signed in via listener");
           router.replace('/clients');
         }
       }
     );
+
     return () => subscription.unsubscribe();
   }, [router]);
 
@@ -33,15 +41,24 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // CHANGED: destructure data too + redirect immediately on success
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-    if (error) {
+    if (authError) {
       setError('Invalid email or password. Please try again.');
       setLoading(false);
+    } else {
+      // This is the reliable redirect
+      console.log("✅ Login successful – redirecting");
+      router.replace('/clients');
+      // No need to setLoading(false) – we're navigating away
     }
-    // Don't setLoading(false) on success — keep button disabled until redirect fires
   }
 
+  // ... rest of your JSX is unchanged
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
