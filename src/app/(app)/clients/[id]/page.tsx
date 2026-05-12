@@ -9,7 +9,9 @@ import { useClientProfile } from '@/features/clients/hooks/useClientProfile';
 import { ScheduleAppointmentModal } from '@/features/appointments/components/ScheduleAppointmentModal';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Plus, Upload, Download, Trash2, Users } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Plus, Upload, Download, Trash2, Users, Clock, Pencil } from 'lucide-react';
+import { useForm } from 'react-hook-form';
 import {
   listDocuments, uploadDocument, deleteDocument, getDownloadUrl,
   DOCUMENT_CATEGORIES, VISIBILITY_OPTIONS,
@@ -77,14 +79,14 @@ const APPT_STATUS: Record<string, { bg: string; text: string; dot: string }> = {
   no_show:   { bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-400' },
 };
 
-function ApptCard({ appt }: { appt: Appointment }) {
+function ApptCard({ appt, onEdit }: { appt: Appointment; onEdit?: () => void }) {
   const pill  = APPT_STATUS[appt.status] ?? APPT_STATUS.scheduled;
   const d     = new Date(appt.starts_at);
   const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
   const day   = d.getDate();
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border bg-background px-4 py-3">
+    <div className="group flex items-center gap-4 rounded-xl border bg-background px-4 py-3">
       <div className="text-center min-w-[36px]">
         <div className="text-[10px] font-medium text-muted-foreground tracking-wide">{month}</div>
         <div className="text-xl font-semibold leading-tight text-primary">{day}</div>
@@ -102,6 +104,14 @@ function ApptCard({ appt }: { appt: Appointment }) {
         <span className={clsx('h-1.5 w-1.5 rounded-full', pill.dot)} />
         {appt.status.charAt(0).toUpperCase() + appt.status.slice(1)}
       </span>
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          className="opacity-0 group-hover:opacity-100 transition-opacity h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted shrink-0"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
@@ -178,9 +188,165 @@ function PackageUsageCard({ clientId, refreshKey }: { clientId: string; refreshK
   );
 }
 
+type EditApptFormValues = {
+  date:     string;
+  time:     string;
+  status:   string;
+  location: string;
+  notes:    string;
+};
+
+function EditAppointmentModal({
+  open, appt, onClose, onSaved, onDeleted,
+}: {
+  open:      boolean;
+  appt:      Appointment | null;
+  onClose:   () => void;
+  onSaved:   (updated: Appointment) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const [saving,   setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
+
+  const { register, handleSubmit, reset, watch } = useForm<EditApptFormValues>({
+    defaultValues: { date: '', time: '10:00', status: 'scheduled', location: '', notes: '' },
+  });
+
+  const watchDate = watch('date');
+  const watchTime = watch('time');
+
+  useEffect(() => {
+    if (!appt) return;
+    const d = new Date(appt.starts_at);
+    reset({
+      date:     d.toLocaleDateString('en-CA'),         // YYYY-MM-DD in local tz
+      time:     `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,
+      status:   appt.status,
+      location: appt.location ?? '',
+      notes:    appt.notes ?? '',
+    });
+    setError(null);
+  }, [appt, reset]);
+
+  const durationMins = appt?.appointment_types?.duration_minutes ?? 60;
+
+  const endPreview = watchDate && watchTime
+    ? new Date(new Date(`${watchDate}T${watchTime}:00`).getTime() + durationMins * 60_000)
+        .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : null;
+
+  async function onSubmit(values: EditApptFormValues) {
+    if (!appt) return;
+    setSaving(true); setError(null);
+    const startsAt = new Date(`${values.date}T${values.time}:00`).toISOString();
+    const endsAt   = new Date(new Date(startsAt).getTime() + durationMins * 60_000).toISOString();
+    const { data, error: err } = await supabase
+      .from('appointments')
+      .update({ starts_at: startsAt, ends_at: endsAt, status: values.status, location: values.location || null, notes: values.notes || null })
+      .eq('id', appt.id)
+      .select('id, title, starts_at, ends_at, status, location, notes, appointment_types(name, duration_minutes, mode)')
+      .single();
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onSaved(data as unknown as Appointment);
+    onClose();
+  }
+
+  async function handleDelete() {
+    if (!appt) return;
+    if (!confirm('Delete this appointment? The slot will be freed and can be rescheduled.')) return;
+    setDeleting(true);
+    await supabase.from('appointments').delete().eq('id', appt.id);
+    setDeleting(false);
+    onDeleted(appt.id);
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Appointment</DialogTitle>
+        </DialogHeader>
+        {appt && (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm font-medium">
+              {appt.appointment_types?.name ?? appt.title ?? 'Appointment'}
+            </div>
+
+            {error && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">{error}</div>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Date</Label>
+                <Input type="date" {...register('date', { required: true })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Start Time</Label>
+                <Input type="time" {...register('time', { required: true })} />
+              </div>
+            </div>
+
+            {endPreview && (
+              <div className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                Ends at <strong className="text-foreground ml-1">{endPreview}</strong>
+                <span className="ml-1">({durationMins} min)</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <select className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9" {...register('status')}>
+                <option value="scheduled">Scheduled</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+                <option value="no_show">No Show</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Location <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Input placeholder="Address or video link" {...register('location')} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <textarea
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-none"
+                rows={3}
+                {...register('notes')}
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t">
+              <Button
+                type="button" variant="outline" size="sm"
+                className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                onClick={handleDelete} disabled={deleting}
+              >
+                {deleting ? 'Deleting…' : 'Delete Appointment'}
+              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Button>
+              </div>
+            </div>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AppointmentsTab({ clientId, refreshKey }: { clientId: string; refreshKey: number }) {
-  const [appts, setAppts]   = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [appts, setAppts]         = useState<Appointment[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [editingAppt, setEditingAppt] = useState<Appointment | null>(null);
+  const [pkgRefreshKey, setPkgRefreshKey] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -193,37 +359,63 @@ function AppointmentsTab({ clientId, refreshKey }: { clientId: string; refreshKe
       .then(({ data }) => { setAppts((data as any) ?? []); setLoading(false); });
   }, [clientId, refreshKey]);
 
+  function handleSaved(updated: Appointment) {
+    setAppts(prev => prev.map(a => a.id === updated.id ? updated : a));
+    setPkgRefreshKey(k => k + 1);
+  }
+
+  function handleDeleted(id: string) {
+    setAppts(prev => prev.filter(a => a.id !== id));
+    setPkgRefreshKey(k => k + 1);
+  }
+
   if (loading) return <div className="text-sm text-muted-foreground py-8 text-center">Loading…</div>;
 
   const upcoming = appts.filter(a => a.status === 'scheduled' && !isPast(a.starts_at));
   const past     = appts.filter(a => a.status !== 'scheduled' || isPast(a.starts_at));
 
-  if (!appts.length) return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-dashed p-12 text-center">
-        <p className="text-sm font-medium text-muted-foreground">No appointments yet</p>
-        <p className="text-xs text-muted-foreground mt-1">Click "Schedule Appt" to add one</p>
-      </div>
-      <PackageUsageCard clientId={clientId} refreshKey={refreshKey} />
-    </div>
-  );
+  const combinedRefresh = refreshKey + pkgRefreshKey;
 
   return (
-    <div className="space-y-6">
-      {upcoming.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Upcoming</p>
-          <div className="space-y-2">{upcoming.map(a => <ApptCard key={a.id} appt={a} />)}</div>
+    <>
+      {!appts.length ? (
+        <div className="space-y-6">
+          <div className="rounded-xl border border-dashed p-12 text-center">
+            <p className="text-sm font-medium text-muted-foreground">No appointments yet</p>
+            <p className="text-xs text-muted-foreground mt-1">Click "Schedule Appt" to add one</p>
+          </div>
+          <PackageUsageCard clientId={clientId} refreshKey={combinedRefresh} />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {upcoming.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Upcoming</p>
+              <div className="space-y-2">
+                {upcoming.map(a => <ApptCard key={a.id} appt={a} onEdit={() => setEditingAppt(a)} />)}
+              </div>
+            </div>
+          )}
+          {past.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Past</p>
+              <div className="space-y-2 opacity-70">
+                {past.map(a => <ApptCard key={a.id} appt={a} onEdit={() => setEditingAppt(a)} />)}
+              </div>
+            </div>
+          )}
+          <PackageUsageCard clientId={clientId} refreshKey={combinedRefresh} />
         </div>
       )}
-      {past.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Past</p>
-          <div className="space-y-2 opacity-70">{past.map(a => <ApptCard key={a.id} appt={a} />)}</div>
-        </div>
-      )}
-      <PackageUsageCard clientId={clientId} refreshKey={refreshKey} />
-    </div>
+
+      <EditAppointmentModal
+        open={!!editingAppt}
+        appt={editingAppt}
+        onClose={() => setEditingAppt(null)}
+        onSaved={handleSaved}
+        onDeleted={handleDeleted}
+      />
+    </>
   );
 }
 
@@ -615,11 +807,233 @@ function DocumentsTab({ clientId, clientName }: { clientId: string; clientName: 
   );
 }
 
-function PlaceholderTab({ label }: { label: string }) {
+type Task = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: 'todo' | 'done';
+  deadline: string | null;
+  created_at: string;
+};
+
+function TasksTab({ clientId }: { clientId: string }) {
+  const [tasks, setTasks]         = useState<Task[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [title, setTitle]         = useState('');
+  const [description, setDescription] = useState('');
+  const [deadline, setDeadline]   = useState('');
+  const [saving, setSaving]       = useState(false);
+
+  useEffect(() => {
+    supabase.from('tasks').select('id, title, description, status, deadline, created_at')
+      .eq('client_id', clientId).order('created_at', { ascending: false })
+      .then(({ data }) => { setTasks((data as any) ?? []); setLoading(false); });
+  }, [clientId]);
+
+  function openNew() {
+    setEditingId(null);
+    setTitle('');
+    setDescription('');
+    setShowForm(true);
+  }
+
+  function openEdit(t: Task) {
+    setEditingId(t.id);
+    setTitle(t.title);
+    setDescription(t.description ?? '');
+    setDeadline(t.deadline ?? '');
+    setShowForm(true);
+  }
+
+  function cancelForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setTitle('');
+    setDescription('');
+    setDeadline('');
+  }
+
+  async function saveTask() {
+    if (!title.trim()) return;
+    setSaving(true);
+    if (editingId) {
+      const { data } = await supabase.from('tasks')
+        .update({ title: title.trim(), description: description.trim() || null, deadline: deadline || null })
+        .eq('id', editingId)
+        .select('id, title, description, status, deadline, created_at').single();
+      if (data) setTasks(prev => prev.map(t => t.id === editingId ? data as Task : t));
+    } else {
+      const { data } = await supabase.from('tasks').insert({
+        client_id:   clientId,
+        org_id:      process.env.NEXT_PUBLIC_ORG_ID!,
+        title:       title.trim(),
+        description: description.trim() || null,
+        deadline:    deadline || null,
+        status:      'todo',
+      }).select('id, title, description, status, deadline, created_at').single();
+      if (data) setTasks(prev => [data as Task, ...prev]);
+    }
+    cancelForm();
+    setSaving(false);
+  }
+
+  async function toggleStatus(task: Task) {
+    const next = task.status === 'todo' ? 'done' : 'todo';
+    const { data } = await supabase.from('tasks')
+      .update({ status: next })
+      .eq('id', task.id)
+      .select('id, title, description, status, created_at').single();
+    if (data) setTasks(prev => prev.map(t => t.id === task.id ? data as Task : t));
+  }
+
+  async function deleteTask(id: string) {
+    if (!confirm('Delete this task?')) return;
+    await supabase.from('tasks').delete().eq('id', id);
+    setTasks(prev => prev.filter(t => t.id !== id));
+  }
+
+  if (loading) return <div className="text-sm text-muted-foreground py-8 text-center">Loading…</div>;
+
+  const todo = tasks.filter(t => t.status === 'todo');
+  const done = tasks.filter(t => t.status === 'done');
+
   return (
-    <div className="rounded-xl border border-dashed p-12 text-center">
-      <p className="text-sm font-medium text-muted-foreground">{label}</p>
-      <p className="text-xs text-muted-foreground mt-1">Coming soon</p>
+    <div className="space-y-4">
+      {!showForm && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={openNew} className="gap-1.5">
+            <Plus className="h-3.5 w-3.5" /> New Task
+          </Button>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="rounded-xl border bg-background p-4 space-y-3">
+          <div className="text-sm font-medium text-muted-foreground">
+            {editingId ? 'Edit Task' : 'New Task'}
+          </div>
+          <input
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
+            placeholder="Task title"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            autoFocus
+          />
+          <textarea
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-none"
+            rows={2}
+            placeholder="Description (optional)"
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+          />
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground whitespace-nowrap">Deadline</label>
+            <input
+              type="date"
+              className="rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+              value={deadline}
+              onChange={e => setDeadline(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={cancelForm}>Cancel</Button>
+            <Button size="sm" onClick={saveTask} disabled={saving || !title.trim()}>
+              {saving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Task'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {!tasks.length && !showForm ? (
+        <div className="rounded-xl border border-dashed p-12 text-center">
+          <p className="text-sm font-medium text-muted-foreground">No tasks yet</p>
+          <p className="text-xs text-muted-foreground mt-1">Click "New Task" to add one</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {todo.length > 0 && (
+            <div className="space-y-2">
+              {todo.map(t => (
+                <TaskRow key={t.id} task={t} onToggle={toggleStatus} onEdit={openEdit} onDelete={deleteTask} />
+              ))}
+            </div>
+          )}
+          {done.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Completed</p>
+              <div className="space-y-2 opacity-60">
+                {done.map(t => (
+                  <TaskRow key={t.id} task={t} onToggle={toggleStatus} onEdit={openEdit} onDelete={deleteTask} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TaskRow({
+  task,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  task: Task;
+  onToggle: (t: Task) => void;
+  onEdit: (t: Task) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl border bg-background px-4 py-3 group">
+      <button
+        onClick={() => onToggle(task)}
+        className={clsx(
+          'mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center transition-colors',
+          task.status === 'done'
+            ? 'bg-primary border-primary text-primary-foreground'
+            : 'border-muted-foreground/40 hover:border-primary'
+        )}
+      >
+        {task.status === 'done' && (
+          <svg className="h-2.5 w-2.5" viewBox="0 0 10 10" fill="none">
+            <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className={clsx('text-sm font-medium', task.status === 'done' && 'line-through text-muted-foreground')}>
+          {task.title}
+        </div>
+        {task.description && (
+          <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{task.description}</div>
+        )}
+        <div className="flex items-center gap-3 mt-1">
+          {task.deadline && (
+            <span className="text-xs font-medium text-amber-600">
+              Due {new Date(task.deadline + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+          )}
+          <span className="text-xs text-muted-foreground/60">{fmtDate(task.created_at)}</span>
+        </div>
+      </div>
+      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <button
+          onClick={() => onEdit(task)}
+          className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors"
+        >
+          Edit
+        </button>
+        <button
+          onClick={() => onDelete(task.id)}
+          className="text-xs text-muted-foreground hover:text-destructive px-2 py-1 rounded hover:bg-destructive/10 transition-colors"
+        >
+          Delete
+        </button>
+      </div>
     </div>
   );
 }
@@ -696,7 +1110,7 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
             {activeTab === 'notes'        && <NotesTab clientId={id} />}
             {activeTab === 'documents'    && <DocumentsTab clientId={id} clientName={client.name} />}
             {activeTab === 'packages'     && <PackagesTab clientId={id} />}
-            {activeTab === 'tasks'        && <PlaceholderTab label="No tasks yet" />}
+            {activeTab === 'tasks'        && <TasksTab clientId={id} />}
           </div>
         </div>
       </div>

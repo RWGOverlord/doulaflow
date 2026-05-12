@@ -2,9 +2,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Calendar, dateFnsLocalizer, Views } from 'react-big-calendar';
+import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -138,12 +139,13 @@ function EventPopup({
           </div>
 
           <div className="flex justify-end pt-1">
-            <a
+            <Link
               href={`/clients/${event.resource.clientId}`}
+              onClick={onClose}
               className="text-xs font-medium text-primary hover:underline"
             >
               View client →
-            </a>
+            </Link>
           </div>
         </div>
       </div>
