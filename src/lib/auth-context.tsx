@@ -47,32 +47,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // Get initial session immediately
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        const profile = await loadProfile(session.user);
-        if (mounted) setUser(profile);
-      }
+    // Safety net: if the auth handshake hangs (slow network, congested DB),
+    // unblock the loading state after 8 seconds so the user isn't permanently stuck.
+    const timeout = setTimeout(() => {
       if (mounted) setLoading(false);
-    });
+    }, 8000);
 
-    // Listen for auth changes (login/logout)
+    // onAuthStateChange fires INITIAL_SESSION immediately with the cached session,
+    // so a separate getSession() call is redundant and creates a race condition
+    // where both try to call loadProfile concurrently.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         if (!mounted) return;
         if (session?.user) {
-          const profile = await loadProfile(session.user);
-          if (mounted) setUser(profile);
+          try {
+            const profile = await loadProfile(session.user);
+            if (mounted) setUser(profile);
+          } catch {
+            if (mounted) setUser(null);
+          }
         } else {
           if (mounted) setUser(null);
         }
-        if (mounted) setLoading(false);
+        if (mounted) {
+          clearTimeout(timeout);
+          setLoading(false);
+        }
       }
     );
 
     return () => {
       mounted = false;
+      clearTimeout(timeout);
       subscription.unsubscribe();
     };
   }, []);
