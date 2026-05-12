@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { listPackages, type PackageSummary } from '@/features/packages/api/packages.api';
+import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -150,7 +151,10 @@ export default function NewClientWizard() {
         .single();
 
       if (clientError || !client) {
-        console.error('Error creating client:', clientError);
+        logger.error('clients', 'create', clientError?.message ?? 'Insert returned no data', {
+          code: clientError?.code,
+          details: clientError?.details,
+        });
         setError(clientError?.message ?? 'Failed to create client.');
         return;
       }
@@ -169,7 +173,11 @@ export default function NewClientWizard() {
           });
 
         if (cpError) {
-          console.error('Error assigning package:', cpError);
+          logger.error('clients', 'assignPackage', cpError.message, {
+            code: cpError.code,
+            clientId: client.id,
+            packageId: values.packageId,
+          });
           setError('Client created, but failed to assign package: ' + cpError.message);
           return;
         }

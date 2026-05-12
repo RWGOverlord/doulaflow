@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { logger } from '@/lib/logger';
 import type { User } from '@supabase/supabase-js';
 
 type AuthUser = {
@@ -63,7 +64,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           try {
             const profile = await loadProfile(session.user);
             if (mounted) setUser(profile);
-          } catch {
+          } catch (err) {
+            logger.error('auth', 'loadProfile', 'Failed to load user profile from DB', {
+              userId: session.user.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
             if (mounted) setUser(null);
           }
         } else {
