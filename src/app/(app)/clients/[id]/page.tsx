@@ -632,6 +632,59 @@ function PackagesTab({ clientId }: { clientId: string }) {
   );
 }
 
+// ─── Add-ons Tab ──────────────────────────────────────────────────────────────
+
+type ClientAddOn = {
+  id:       number;
+  quantity: number;
+  add_ons:  { name: string; description: string | null; price: number | null } | null;
+};
+
+function AddOnsTab({ clientId }: { clientId: string }) {
+  const [addOns, setAddOns]   = useState<ClientAddOn[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.from('client_add_ons')
+      .select('id, quantity, add_ons ( name, description, price )')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => { setAddOns((data as any) ?? []); setLoading(false); });
+  }, [clientId]);
+
+  if (loading) return <div className="text-sm text-muted-foreground py-8 text-center">Loading…</div>;
+
+  if (!addOns.length) return (
+    <div className="rounded-xl border border-dashed p-12 text-center">
+      <p className="text-sm font-medium text-muted-foreground">No add-ons assigned</p>
+      <p className="text-xs text-muted-foreground mt-1">Edit the client to add individual services</p>
+    </div>
+  );
+
+  return (
+    <div className="rounded-xl border bg-background overflow-hidden">
+      <div className="divide-y">
+        {addOns.map(cao => (
+          <div key={cao.id} className="flex items-center justify-between px-5 py-4">
+            <div>
+              <div className="text-sm font-medium">{cao.add_ons?.name ?? '—'}</div>
+              {cao.add_ons?.description && (
+                <div className="text-xs text-muted-foreground mt-0.5">{cao.add_ons.description}</div>
+              )}
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {cao.add_ons?.price != null && (
+                <span className="text-sm text-muted-foreground">${cao.add_ons.price.toLocaleString()}</span>
+              )}
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">×{cao.quantity}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Documents Tab ────────────────────────────────────────────────────────────
 
@@ -1038,7 +1091,7 @@ function TaskRow({
   );
 }
 
-const TABS = ['appointments', 'notes', 'documents', 'packages', 'tasks'] as const;
+const TABS = ['appointments', 'notes', 'documents', 'packages', 'add-ons', 'tasks'] as const;
 type Tab = typeof TABS[number];
 
 export default function ClientCasePage({ params }: { params: Promise<{ id: string }> }) {
@@ -1110,6 +1163,7 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
             {activeTab === 'notes'        && <NotesTab clientId={id} />}
             {activeTab === 'documents'    && <DocumentsTab clientId={id} clientName={client.name} />}
             {activeTab === 'packages'     && <PackagesTab clientId={id} />}
+            {activeTab === 'add-ons'      && <AddOnsTab clientId={id} />}
             {activeTab === 'tasks'        && <TasksTab clientId={id} />}
           </div>
         </div>

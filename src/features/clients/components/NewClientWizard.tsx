@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from 'next/navigation';
 import { listPackages, type PackageSummary } from '@/features/packages/api/packages.api';
+import { listAddOns, type AddOn } from '@/features/add-ons/api/add_ons.api';
 import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,6 +76,8 @@ export default function NewClientWizard() {
   const router = useRouter();
   const [step, setStep] = React.useState(1);
   const [packages, setPackages] = React.useState<PackageSummary[]>([]);
+  const [addOns, setAddOns] = React.useState<AddOn[]>([]);
+  const [selectedAddOns, setSelectedAddOns] = React.useState<{ addOnId: number; quantity: number }[]>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -91,6 +94,7 @@ export default function NewClientWizard() {
 
   React.useEffect(() => {
     listPackages().then(setPackages).catch(console.error);
+    listAddOns().then(setAddOns).catch(console.error);
   }, []);
 
   const watchedServiceTypes = watch('serviceTypes');
@@ -104,6 +108,20 @@ export default function NewClientWizard() {
       'serviceTypes',
       current.includes(type) ? current.filter((t) => t !== type) : [...current, type],
       { shouldDirty: true }
+    );
+  }
+
+  function toggleAddOn(addOnId: number) {
+    setSelectedAddOns(prev =>
+      prev.some(a => a.addOnId === addOnId)
+        ? prev.filter(a => a.addOnId !== addOnId)
+        : [...prev, { addOnId, quantity: 1 }]
+    );
+  }
+
+  function updateAddOnQty(addOnId: number, quantity: number) {
+    setSelectedAddOns(prev =>
+      prev.map(a => a.addOnId === addOnId ? { ...a, quantity: Math.max(1, quantity) } : a)
     );
   }
 
@@ -180,6 +198,23 @@ export default function NewClientWizard() {
           });
           setError('Client created, but failed to assign package: ' + cpError.message);
           return;
+        }
+      }
+
+      // 3) Save any selected add-ons
+      if (selectedAddOns.length > 0) {
+        const { error: aoError } = await supabase
+          .from('client_add_ons')
+          .insert(
+            selectedAddOns.map(a => ({
+              client_id: client.id,
+              add_on_id: a.addOnId,
+              quantity:  a.quantity,
+              org_id:    orgId,
+            }))
+          );
+        if (aoError) {
+          logger.error('clients', 'assignAddOns', aoError.message, { clientId: client.id });
         }
       }
 
@@ -307,6 +342,51 @@ export default function NewClientWizard() {
               )}
             </div>
           )}
+
+          {/* Add-ons */}
+          {addOns.length > 0 && (
+            <div className="space-y-2">
+              <div>
+                <label className="text-sm font-medium">Add-ons</label>
+                <p className="text-xs text-muted-foreground">Optional individual services outside the package</p>
+              </div>
+              <div className="rounded-lg border overflow-hidden divide-y">
+                {addOns.map(addon => {
+                  const sel = selectedAddOns.find(a => a.addOnId === addon.id);
+                  return (
+                    <div key={addon.id} className="flex items-center gap-3 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        id={`addon-${addon.id}`}
+                        checked={!!sel}
+                        onChange={() => toggleAddOn(addon.id)}
+                        className="h-4 w-4 rounded border-muted-foreground/30 accent-primary"
+                      />
+                      <label htmlFor={`addon-${addon.id}`} className="flex-1 cursor-pointer">
+                        <div className="text-sm font-medium">{addon.name}</div>
+                        {addon.description && (
+                          <div className="text-xs text-muted-foreground">{addon.description}</div>
+                        )}
+                      </label>
+                      {addon.price != null && (
+                        <span className="text-sm text-muted-foreground shrink-0">${addon.price.toLocaleString()}</span>
+                      )}
+                      {sel && (
+                        <input
+                          type="number"
+                          min="1"
+                          value={sel.quantity}
+                          onChange={e => updateAddOnQty(addon.id, parseInt(e.target.value) || 1)}
+                          className="w-14 rounded-md border bg-background px-2 py-1 text-sm text-center"
+                          onClick={e => e.stopPropagation()}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -330,6 +410,15 @@ export default function NewClientWizard() {
                 <span className="text-muted-foreground">Package: </span>
                 {selectedPkg?.name || '— None —'}
               </div>
+              {selectedAddOns.length > 0 && (
+                <div className="sm:col-span-2">
+                  <span className="text-muted-foreground">Add-ons: </span>
+                  {selectedAddOns.map(a => {
+                    const ao = addOns.find(x => x.id === a.addOnId);
+                    return ao ? `${ao.name} ×${a.quantity}` : null;
+                  }).filter(Boolean).join(', ')}
+                </div>
+              )}
             </div>
           </div>
           <p className="text-sm text-muted-foreground">

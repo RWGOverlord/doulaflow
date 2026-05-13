@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, X, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -241,7 +241,10 @@ export default function NewPackagePage() {
                       <DialogTitle>New Appointment Type</DialogTitle>
                     </DialogHeader>
                     <form
-                      onSubmit={apptTypeForm.handleSubmit((d) => createApptTypeMutation.mutate(d))}
+                      onSubmit={(e) => {
+                        e.stopPropagation();
+                        apptTypeForm.handleSubmit((d) => createApptTypeMutation.mutate(d))(e);
+                      }}
                       className="space-y-4 pt-2"
                     >
                       <div className="space-y-1.5">

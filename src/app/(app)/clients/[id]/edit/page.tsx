@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { clientSchema, type ClientFormValues, SERVICE_TYPES, SERVICE_TYPE_LABELS, CLIENT_STATUSES } from '@/features/clients/types';
 import { listPackages, type PackageSummary } from '@/features/packages/api/packages.api';
+import { listAddOns, type AddOn } from '@/features/add-ons/api/add_ons.api';
 import { supabase } from '@/lib/supabaseClient';
 import { ArrowLeft, User, Baby, Package, FileText } from 'lucide-react';
 import clsx from 'clsx';
@@ -21,6 +22,9 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
 
   const [packages, setPackages]                 = useState<PackageSummary[]>([]);
   const [currentPackageId, setCurrentPackageId] = useState<string | null>(null);
+  const originalPackageId                       = React.useRef<string | null>(null);
+  const [addOns, setAddOns]                     = useState<AddOn[]>([]);
+  const [selectedAddOns, setSelectedAddOns]     = useState<{ addOnId: number; quantity: number }[]>([]);
   const [isLoading, setIsLoading]               = useState(true);
   const [isSaving, setIsSaving]                 = useState(false);
   const [error, setError]                       = useState<string | null>(null);
@@ -66,7 +70,17 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
         const { data: cp } = await supabase
           .from('client_packages').select('package_id')
           .eq('client_id', id).eq('is_active', true).maybeSingle();
-        if (cp?.package_id) setCurrentPackageId(cp.package_id);
+        if (cp?.package_id) {
+          setCurrentPackageId(cp.package_id);
+          originalPackageId.current = cp.package_id;
+        }
+
+        const { data: existingAddOns } = await supabase
+          .from('client_add_ons').select('add_on_id, quantity')
+          .eq('client_id', id);
+        if (existingAddOns?.length) {
+          setSelectedAddOns(existingAddOns.map((a: any) => ({ addOnId: a.add_on_id, quantity: a.quantity })));
+        }
       } catch (err: any) {
         setError(err?.message ?? 'Failed to load client.');
       } finally {
@@ -78,7 +92,22 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
 
   useEffect(() => {
     listPackages().then(setPackages).catch(console.error);
+    listAddOns().then(setAddOns).catch(console.error);
   }, []);
+
+  function toggleAddOn(addOnId: number) {
+    setSelectedAddOns(prev =>
+      prev.some(a => a.addOnId === addOnId)
+        ? prev.filter(a => a.addOnId !== addOnId)
+        : [...prev, { addOnId, quantity: 1 }]
+    );
+  }
+
+  function updateAddOnQty(addOnId: number, quantity: number) {
+    setSelectedAddOns(prev =>
+      prev.map(a => a.addOnId === addOnId ? { ...a, quantity: Math.max(1, quantity) } : a)
+    );
+  }
 
   function toggleServiceType(type: string) {
     const current = watch('service_types') ?? [];
@@ -114,13 +143,30 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
         .eq('id', id);
       if (clientError) throw clientError;
 
-      // Use RPC to atomically deactivate all existing packages and set the new one
-      const { error: pkgError } = await supabase.rpc('set_client_package', {
-        p_client_id: id,
-        p_package_id: currentPackageId ?? null,
-        p_doula_id:   doulaId,
-      });
-      if (pkgError) throw pkgError;
+      // Only call the RPC if the package actually changed
+      if (currentPackageId !== originalPackageId.current) {
+        const { error: pkgError } = await supabase.rpc('set_client_package', {
+          p_client_id:  id,
+          p_package_id: currentPackageId ?? null,
+          p_doula_id:   doulaId,
+        });
+        if (pkgError) throw pkgError;
+        originalPackageId.current = currentPackageId;
+      }
+
+      // Replace client add-ons: delete existing then insert current selections
+      await supabase.from('client_add_ons').delete().eq('client_id', id);
+      if (selectedAddOns.length > 0) {
+        const orgId = process.env.NEXT_PUBLIC_ORG_ID!;
+        await supabase.from('client_add_ons').insert(
+          selectedAddOns.map(a => ({
+            client_id: id,
+            add_on_id: a.addOnId,
+            quantity:  a.quantity,
+            org_id:    orgId,
+          }))
+        );
+      }
 
       setSuccess(true);
       setTimeout(() => router.push(`/clients/${id}`), 800);
@@ -244,6 +290,47 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {addOns.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  <Label>Add-ons</Label>
+                  <p className="text-xs text-muted-foreground">Optional individual services outside the package</p>
+                  <div className="rounded-lg border overflow-hidden divide-y">
+                    {addOns.map(addon => {
+                      const sel = selectedAddOns.find(a => a.addOnId === addon.id);
+                      return (
+                        <div key={addon.id} className="flex items-center gap-3 px-4 py-3">
+                          <input
+                            type="checkbox"
+                            id={`addon-${addon.id}`}
+                            checked={!!sel}
+                            onChange={() => toggleAddOn(addon.id)}
+                            className="h-4 w-4 rounded border-muted-foreground/30 accent-primary"
+                          />
+                          <label htmlFor={`addon-${addon.id}`} className="flex-1 cursor-pointer">
+                            <div className="text-sm font-medium">{addon.name}</div>
+                            {addon.description && (
+                              <div className="text-xs text-muted-foreground">{addon.description}</div>
+                            )}
+                          </label>
+                          {addon.price != null && (
+                            <span className="text-sm text-muted-foreground shrink-0">${addon.price.toLocaleString()}</span>
+                          )}
+                          {sel && (
+                            <input
+                              type="number"
+                              min="1"
+                              value={sel.quantity}
+                              onChange={e => updateAddOnQty(addon.id, parseInt(e.target.value) || 1)}
+                              className="w-14 rounded-md border bg-background px-2 py-1 text-sm text-center"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

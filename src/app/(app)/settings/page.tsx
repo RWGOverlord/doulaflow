@@ -1,6 +1,6 @@
 // src/app/settings/page.tsx
 import Link from 'next/link';
-import { Calendar, ChevronRight, User, Bell } from 'lucide-react';
+import { Calendar, ChevronRight, User, Bell, Sparkles } from 'lucide-react';
 
 const SETTINGS_SECTIONS = [
   {
@@ -11,6 +11,12 @@ const SETTINGS_SECTIONS = [
         icon:        Calendar,
         label:       'Appointment Types',
         description: 'Manage reusable appointment templates for packages',
+      },
+      {
+        href:        '/settings/add-ons',
+        icon:        Sparkles,
+        label:       'Add-ons',
+        description: 'Custom services you can assign individually to clients',
       },
     ],
   },
