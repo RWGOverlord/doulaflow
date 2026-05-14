@@ -84,6 +84,7 @@ export async function uploadDocument(params: {
 
 export async function listDocuments(params: {
   orgId:     string;
+  doulaId?:  string;
   clientId?: string | null;
 }): Promise<Document[]> {
   let query = supabase
@@ -94,6 +95,21 @@ export async function listDocuments(params: {
 
   if (params.clientId) {
     query = query.eq('client_id', params.clientId);
+  } else if (params.doulaId) {
+    const { data: clientRows } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('doula_id', params.doulaId);
+
+    const clientIds = (clientRows ?? []).map((c: any) => c.id);
+
+    if (clientIds.length > 0) {
+      query = query.or(
+        `client_id.in.(${clientIds.join(',')}),and(client_id.is.null,uploaded_by.eq.${params.doulaId})`
+      );
+    } else {
+      query = query.is('client_id', null).eq('uploaded_by', params.doulaId);
+    }
   }
 
   const { data, error } = await query;

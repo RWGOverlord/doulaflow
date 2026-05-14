@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabaseClient';
+import { getDoulaId } from '@/lib/getDoulaId';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../types';
 import clsx from 'clsx';
 
@@ -136,10 +137,10 @@ export default function NewClientWizard() {
 
     try {
       const orgId    = process.env.NEXT_PUBLIC_ORG_ID;
-      const doulaId  = process.env.NEXT_PUBLIC_USER_ID;
+      const doulaId  = await getDoulaId();
 
       if (!orgId || !doulaId) {
-        setError('Missing NEXT_PUBLIC_ORG_ID or NEXT_PUBLIC_USER_ID in .env.local');
+        setError('Could not resolve your user ID. Please refresh and try again.');
         return;
       }
 

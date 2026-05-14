@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Users, Calendar, DollarSign, TrendingUp } from 'lucide-react';
+import { getDoulaId } from '@/lib/getDoulaId';
 import clsx from 'clsx';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -105,11 +106,11 @@ export default function InsightsPage() {
 
     async function load() {
       try {
-        const orgId = process.env.NEXT_PUBLIC_ORG_ID!;
+        const doulaId = await getDoulaId();
         const { start, end } = weekBounds();
 
         const [clientsRes, apptsRes, packagesRes] = await Promise.all([
-          supabase.from('clients').select('status').eq('org_id', orgId),
+          supabase.from('clients').select('status').eq('doula_id', doulaId),
           supabase
             .from('appointments')
             .select('id, starts_at, clients(name), appointment_types(name)')
@@ -119,7 +120,8 @@ export default function InsightsPage() {
             .order('starts_at', { ascending: true }),
           supabase
             .from('client_packages')
-            .select('status, packages(price)'),
+            .select('status, packages(price)')
+            .eq('doula_id', doulaId),
         ]);
 
         if (!mounted) return;

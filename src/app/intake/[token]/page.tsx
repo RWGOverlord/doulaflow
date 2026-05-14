@@ -67,7 +67,7 @@ function inputCls(hasError?: boolean) {
   return [
     'w-full rounded-lg border px-3 py-2 text-sm text-stone-900',
     'placeholder:text-stone-400 bg-white',
-    'focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400',
+    'focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40',
     hasError ? 'border-red-400' : 'border-stone-300',
   ].join(' ');
 }
@@ -80,7 +80,7 @@ function FieldError({ msg }: { msg?: string }) {
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="pt-4 pb-1 border-b border-stone-100 mb-4">
-      <h3 className="text-xs font-semibold uppercase tracking-widest text-violet-600">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-primary">
         {children}
       </h3>
     </div>
@@ -127,15 +127,15 @@ function StepIndicator({ current }: { current: number }) {
             <div className="flex flex-col items-center gap-1">
               <div className={[
                 'h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold',
-                done   ? 'bg-violet-600 text-white'          : '',
-                active ? 'bg-violet-600 text-white ring-4 ring-violet-100' : '',
+                done   ? 'bg-primary text-primary-foreground'          : '',
+                active ? 'bg-primary text-primary-foreground ring-4 ring-primary/10' : '',
                 !done && !active ? 'bg-stone-200 text-stone-500' : '',
               ].join(' ')}>
                 {done ? '✓' : num}
               </div>
               <span className={[
                 'text-[10px] font-medium hidden sm:block w-20 text-center leading-tight',
-                active ? 'text-violet-700' : 'text-stone-400',
+                active ? 'text-primary' : 'text-stone-400',
               ].join(' ')}>
                 {label}
               </span>
@@ -143,7 +143,7 @@ function StepIndicator({ current }: { current: number }) {
             {i < TOTAL_STEPS - 1 && (
               <div className={[
                 'h-0.5 w-8 sm:w-12 mx-1 mb-5',
-                done ? 'bg-violet-600' : 'bg-stone-200',
+                done ? 'bg-primary' : 'bg-stone-200',
               ].join(' ')} />
             )}
           </div>
@@ -306,7 +306,7 @@ export default function IntakePage() {
   if (tokenStatus === 'loading') {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
+        <Loader2 className="h-6 w-6 animate-spin text-primary/70" />
       </div>
     );
   }
@@ -370,7 +370,7 @@ export default function IntakePage() {
 
         {/* Branding */}
         <div className="text-center mb-8">
-          <p className="text-xs font-semibold uppercase tracking-widest text-violet-500 mb-1">
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary/70 mb-1">
             La Quintana Doula Care
           </p>
           <h1 className="text-2xl font-bold text-stone-800">New Client Intake Form</h1>
@@ -395,7 +395,7 @@ export default function IntakePage() {
               {step === 1 && (
                 <div className="space-y-5">
                   {/* Intro banner */}
-                  <div className="rounded-xl bg-violet-50 border border-violet-100 px-5 py-4 text-sm text-violet-800 leading-relaxed">
+                  <div className="rounded-xl bg-primary/5 border border-primary/10 px-5 py-4 text-sm text-primary leading-relaxed">
                     Congratulations on your pregnancy! I am honored to take this journey with you &
                     look forward to learning more about you and your desired birth experience. Please
                     complete the fields below so that we may determine how I can serve you best.{' '}
@@ -593,13 +593,13 @@ export default function IntakePage() {
                           className={[
                             'flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer text-sm transition-colors',
                             birthExpArr.includes(opt)
-                              ? 'border-violet-400 bg-violet-50 text-violet-800'
+                              ? 'border-primary/40 bg-primary/5 text-primary'
                               : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50',
                           ].join(' ')}
                         >
                           <input
                             type="checkbox"
-                            className="accent-violet-600 h-4 w-4 shrink-0"
+                            className="accent-primary h-4 w-4 shrink-0"
                             checked={birthExpArr.includes(opt)}
                             onChange={() => toggleBirthExp(opt)}
                           />
@@ -850,7 +850,7 @@ export default function IntakePage() {
                   <button
                     type="button"
                     onClick={() => setStep(s => s + 1)}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors"
                   >
                     Next <ChevronRight className="h-4 w-4" />
                   </button>
@@ -858,7 +858,7 @@ export default function IntakePage() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
+                    className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
                   >
                     {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                     {isSubmitting ? 'Submitting…' : 'Submit Form'}

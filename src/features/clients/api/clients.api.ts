@@ -1,5 +1,6 @@
 // src/features/clients/api/clients.api.ts
 import { supabase } from '@/lib/supabaseClient';
+import { getDoulaId } from '@/lib/getDoulaId';
 
 // ─── Core Client type (matches public.clients table) ─────────────────────────
 
@@ -42,7 +43,8 @@ export type ClientListRow = {
 // ─── Fetch helpers ────────────────────────────────────────────────────────────
 
 export async function listClientsForListView(): Promise<ClientListRow[]> {
-  const now = new Date().toISOString();
+  const now      = new Date().toISOString();
+  const doulaId  = await getDoulaId();
 
   // Fetch clients with active package + next upcoming appointment
   const { data, error } = await supabase
@@ -69,6 +71,7 @@ export async function listClientsForListView(): Promise<ClientListRow[]> {
         status
       )
     `)
+    .eq('doula_id', doulaId)
     .order('name', { ascending: true });
 
   if (error) throw error;
@@ -100,9 +103,11 @@ export async function listClientsForListView(): Promise<ClientListRow[]> {
 }
 
 export async function fetchClients(): Promise<Client[]> {
+  const doulaId = await getDoulaId();
   const { data, error } = await supabase
     .from('clients')
     .select('*')
+    .eq('doula_id', doulaId)
     .order('name', { ascending: true });
   if (error) throw error;
   return data ?? [];

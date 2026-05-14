@@ -1,5 +1,6 @@
 // src/features/add-ons/api/add_ons.api.ts
 import { supabase } from '@/lib/supabaseClient';
+import { getDoulaId } from '@/lib/getDoulaId';
 
 export type AddOn = {
   id:          number;
@@ -9,11 +10,11 @@ export type AddOn = {
 };
 
 export async function listAddOns(): Promise<AddOn[]> {
-  const orgId = process.env.NEXT_PUBLIC_ORG_ID!;
+  const doulaId = await getDoulaId();
   const { data, error } = await supabase
     .from('add_ons')
     .select('id, name, description, price')
-    .eq('org_id', orgId)
+    .eq('doula_id', doulaId)
     .order('name', { ascending: true });
   if (error) throw error;
   return data ?? [];
@@ -23,7 +24,7 @@ export async function createAddOn(
   input: Pick<AddOn, 'name' | 'description' | 'price'>
 ): Promise<AddOn> {
   const orgId   = process.env.NEXT_PUBLIC_ORG_ID!;
-  const doulaId = process.env.NEXT_PUBLIC_USER_ID!;
+  const doulaId = await getDoulaId();
   const { data, error } = await supabase
     .from('add_ons')
     .insert({

@@ -33,15 +33,21 @@ export async function POST(req: NextRequest) {
 
     const supabase = adminClient();
 
-    // ── 1. Validate token server-side ─────────────────────────────────────────
+    // ── 1. Validate token server-side (simple lookup, no join) ───────────────
 
     const { data: tokenRow, error: tokenErr } = await supabase
       .from('intake_tokens')
-      .select('id, client_id, expires_at, completed_at, clients(name, org_id)')
+      .select('id, client_id, expires_at, completed_at')
       .eq('token', token)
       .single();
 
     if (tokenErr || !tokenRow) {
+      console.error('[intake/submit] token lookup failed', {
+        code:    tokenErr?.code,
+        message: tokenErr?.message,
+        hint:    tokenErr?.hint,
+        token:   token?.slice(0, 8) + '…',
+      });
       return NextResponse.json({ error: 'Invalid token' }, { status: 404 });
     }
 
@@ -53,9 +59,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'This link has expired' }, { status: 410 });
     }
 
-    const clientId   = tokenRow.client_id as string;
-    const clientName = (tokenRow as any).clients?.name  as string ?? '';
-    const orgId      = (tokenRow as any).clients?.org_id as string ?? '';
+    const clientId = tokenRow.client_id as string;
+
+    // ── 2. Fetch client name + org_id separately ──────────────────────────────
+
+    const { data: clientRow, error: clientFetchErr } = await supabase
+      .from('clients')
+      .select('name, org_id')
+      .eq('id', clientId)
+      .single();
+
+    if (clientFetchErr || !clientRow) {
+      console.error('[intake/submit] client fetch failed', clientFetchErr);
+      return NextResponse.json({ error: 'Client not found' }, { status: 404 });
+    }
+
+    const clientName = (clientRow.name as string) ?? '';
+    const orgId      = (clientRow.org_id as string) ?? '';
 
     // ── 2. Update client record with structured fields ────────────────────────
 

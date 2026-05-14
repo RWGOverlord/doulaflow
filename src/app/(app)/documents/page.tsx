@@ -48,7 +48,7 @@ function UploadModal({
     setFile(null); setTitle(''); setError(null);
     setCategory(defaultCategory ?? 'General');
     setClientId(defaultClientId ?? '');
-    supabase.from('clients').select('id, name').eq('org_id', orgId).order('name')
+    supabase.from('clients').select('id, name').eq('doula_id', userId).order('name')
       .then(({ data }) => setClients(data ?? []));
   }, [open, defaultCategory, defaultClientId, orgId]);
 
@@ -243,7 +243,7 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     if (!user) return;
-    listDocuments({ orgId: user.orgId })
+    listDocuments({ orgId: user.orgId, doulaId: user.id })
       .then(setDocs)
       .catch(console.error)
       .finally(() => setLoading(false));

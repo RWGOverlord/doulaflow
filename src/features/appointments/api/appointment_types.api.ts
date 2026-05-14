@@ -1,5 +1,6 @@
 // src/features/appointments/api/appointment_types.api.ts
 import { supabase } from '@/lib/supabaseClient';
+import { getDoulaId } from '@/lib/getDoulaId';
 
 export type AppointmentTypeSummary = {
   id:               number;
@@ -11,12 +12,12 @@ export type AppointmentTypeSummary = {
 };
 
 export async function listAppointmentTypes(): Promise<AppointmentTypeSummary[]> {
-  const orgId = process.env.NEXT_PUBLIC_ORG_ID!;
+  const doulaId = await getDoulaId();
 
   const { data, error } = await supabase
     .from('appointment_types')
     .select('id, name, duration_minutes, mode, description, price_per_extra')
-    .eq('org_id', orgId)
+    .eq('doula_id', doulaId)
     .order('name', { ascending: true });
 
   if (error) throw error;
@@ -27,7 +28,7 @@ export async function createAppointmentType(
   input: Pick<AppointmentTypeSummary, 'name' | 'duration_minutes' | 'mode' | 'description'>
 ): Promise<AppointmentTypeSummary> {
   const orgId   = process.env.NEXT_PUBLIC_ORG_ID!;
-  const doulaId = process.env.NEXT_PUBLIC_USER_ID!;
+  const doulaId = await getDoulaId();
 
   const { data, error } = await supabase
     .from('appointment_types')

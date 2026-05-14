@@ -1,5 +1,6 @@
 // src/features/packages/api/packages.api.ts
 import { supabase } from '@/lib/supabaseClient';
+import { getDoulaId } from '@/lib/getDoulaId';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ export type PackageInput = {
 async function getIds(): Promise<{ orgId: string; doulaId: string }> {
   return {
     orgId:   process.env.NEXT_PUBLIC_ORG_ID!,
-    doulaId: process.env.NEXT_PUBLIC_USER_ID!,
+    doulaId: await getDoulaId(),
   };
 }
 
