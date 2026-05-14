@@ -101,53 +101,65 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+
     async function load() {
-      const orgId        = process.env.NEXT_PUBLIC_ORG_ID!;
-      const { start, end } = weekBounds();
+      try {
+        const orgId = process.env.NEXT_PUBLIC_ORG_ID!;
+        const { start, end } = weekBounds();
 
-      const [clientsRes, apptsRes, packagesRes] = await Promise.all([
-        supabase.from('clients').select('status').eq('org_id', orgId),
-        supabase
-          .from('appointments')
-          .select('id, starts_at, clients(name), appointment_types(name)')
-          .eq('status', 'scheduled')
-          .gte('starts_at', start)
-          .lte('starts_at', end)
-          .order('starts_at', { ascending: true }),
-        supabase
-          .from('client_packages')
-          .select('status, packages(price)'),
-      ]);
+        const [clientsRes, apptsRes, packagesRes] = await Promise.all([
+          supabase.from('clients').select('status').eq('org_id', orgId),
+          supabase
+            .from('appointments')
+            .select('id, starts_at, clients(name), appointment_types(name)')
+            .eq('status', 'scheduled')
+            .gte('starts_at', start)
+            .lte('starts_at', end)
+            .order('starts_at', { ascending: true }),
+          supabase
+            .from('client_packages')
+            .select('status, packages(price)'),
+        ]);
 
-      // Clients by status
-      const clients = clientsRes.data ?? [];
-      const statusMap: Record<string, number> = {};
-      for (const c of clients) {
-        statusMap[c.status] = (statusMap[c.status] ?? 0) + 1;
+        if (!mounted) return;
+
+        // Clients by status
+        const clients = clientsRes.data ?? [];
+        const statusMap: Record<string, number> = {};
+        for (const c of clients) {
+          statusMap[c.status] = (statusMap[c.status] ?? 0) + 1;
+        }
+        const clientsByStatus = Object.entries(statusMap)
+          .map(([status, count]) => ({ status, count }))
+          .sort((a, b) => b.count - a.count);
+
+        // Revenue
+        const pkgs = (packagesRes.data ?? []) as unknown as PackageRow[];
+        const activeRevenue = pkgs
+          .filter(p => p.status === 'active')
+          .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
+        const totalRevenue = pkgs
+          .filter(p => p.status === 'active' || p.status === 'completed')
+          .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
+
+        setData({
+          totalClients:    clients.length,
+          clientsByStatus,
+          upcomingAppts:   (apptsRes.data ?? []) as unknown as UpcomingAppt[],
+          activeRevenue,
+          totalRevenue,
+        });
+        setLoading(false);
+      } catch (err) {
+        if (!mounted) return;
+        console.error(err);
+        setLoading(false);
       }
-      const clientsByStatus = Object.entries(statusMap)
-        .map(([status, count]) => ({ status, count }))
-        .sort((a, b) => b.count - a.count);
-
-      // Revenue
-      const pkgs = (packagesRes.data ?? []) as PackageRow[];
-      const activeRevenue = pkgs
-        .filter(p => p.status === 'active')
-        .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
-      const totalRevenue = pkgs
-        .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
-
-      setData({
-        totalClients:    clients.length,
-        clientsByStatus,
-        upcomingAppts:   (apptsRes.data ?? []) as UpcomingAppt[],
-        activeRevenue,
-        totalRevenue,
-      });
-      setLoading(false);
     }
 
     load();
+    return () => { mounted = false; };
   }, []);
 
   return (

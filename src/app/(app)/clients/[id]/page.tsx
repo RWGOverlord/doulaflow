@@ -10,7 +10,8 @@ import { ScheduleAppointmentModal } from '@/features/appointments/components/Sch
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Plus, Upload, Download, Trash2, Users, Clock, Pencil } from 'lucide-react';
+import { ArrowLeft, Plus, Upload, Download, Trash2, Users, Clock, Pencil, Link2, Copy, CheckCheck, Loader2, Mail } from 'lucide-react';
+import { generateIntakeToken } from '@/features/intake/api/intake.api';
 import { useForm } from 'react-hook-form';
 import {
   listDocuments, uploadDocument, deleteDocument, getDownloadUrl,
@@ -1091,6 +1092,69 @@ function TaskRow({
   );
 }
 
+// ─── Intake Link Modal ────────────────────────────────────────────────────────
+
+const INTAKE_BASE_URL = 'https://app.laquintanadoulacare.com/intake';
+
+function IntakeLinkModal({
+  open,
+  token,
+  generating,
+  onClose,
+}: {
+  open:       boolean;
+  token:      string | null;
+  generating: boolean;
+  onClose:    () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const url = token ? `${INTAKE_BASE_URL}/${token}` : '';
+
+  async function copyLink() {
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Intake Form Link</DialogTitle>
+        </DialogHeader>
+
+        {generating ? (
+          <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Generating link…
+          </div>
+        ) : (
+          <div className="space-y-4 pt-1">
+            <div className="rounded-lg bg-muted/50 border px-3 py-3">
+              <p className="text-xs font-mono text-muted-foreground break-all leading-relaxed select-all">
+                {url}
+              </p>
+            </div>
+
+            <Button className="w-full gap-2" onClick={copyLink}>
+              {copied
+                ? <><CheckCheck className="h-4 w-4" /> Copied!</>
+                : <><Copy className="h-4 w-4" /> Copy Link</>}
+            </Button>
+
+            <p className="text-xs text-muted-foreground text-center leading-relaxed">
+              This link expires in 7 days. Share it with your client via text or email.
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 const TABS = ['appointments', 'notes', 'documents', 'packages', 'add-ons', 'tasks'] as const;
 type Tab = typeof TABS[number];
 
@@ -1101,6 +1165,48 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
   const [activeTab,       setActiveTab]       = useState<Tab>('appointments');
   const [modalOpen,       setModalOpen]       = useState(false);
   const [apptRefreshKey,  setApptRefreshKey]  = useState(0);
+
+  // Intake form
+  const [intakeModalOpen,  setIntakeModalOpen]  = useState(false);
+  const [intakeToken,      setIntakeToken]      = useState<string | null>(null);
+  const [intakeGenerating, setIntakeGenerating] = useState(false);
+  const [intakeStatus,     setIntakeStatus]     = useState<'sent' | 'completed' | null>(null);
+
+  // Load the most recent token status for this client
+  useEffect(() => {
+    let mounted = true;
+    supabase
+      .from('intake_tokens')
+      .select('expires_at, completed_at')
+      .eq('client_id', id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!mounted || !data) return;
+        if (data.completed_at) {
+          setIntakeStatus('completed');
+        } else if (new Date(data.expires_at) > new Date()) {
+          setIntakeStatus('sent');
+        }
+      });
+    return () => { mounted = false; };
+  }, [id]);
+
+  async function handleSendIntake() {
+    setIntakeGenerating(true);
+    setIntakeModalOpen(true);
+    try {
+      const token = await generateIntakeToken(id);
+      setIntakeToken(token);
+      setIntakeStatus(prev => prev === 'completed' ? 'completed' : 'sent');
+    } catch (err) {
+      console.error('[intake] failed to generate token', err);
+      setIntakeModalOpen(false);
+    } finally {
+      setIntakeGenerating(false);
+    }
+  }
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Loading…</div>
@@ -1120,13 +1226,28 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
             <ArrowLeft className="h-4 w-4" />
           </button>
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">{client.name}</h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-semibold tracking-tight">{client.name}</h1>
+              {intakeStatus === 'completed' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                  <CheckCheck className="h-3 w-3" /> Intake completed
+                </span>
+              )}
+              {intakeStatus === 'sent' && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700">
+                  <Mail className="h-3 w-3" /> Intake form sent
+                </span>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground mt-0.5">
               Client since {new Date(client.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
             </p>
           </div>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleSendIntake} className="gap-1.5">
+            <Link2 className="h-3.5 w-3.5" /> Send Intake Form
+          </Button>
           <Link href={`/clients/${id}/edit`}>
             <Button variant="outline" size="sm">Edit</Button>
           </Link>
@@ -1168,6 +1289,14 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
       </div>
+
+      {/* Intake Link Modal */}
+      <IntakeLinkModal
+        open={intakeModalOpen}
+        token={intakeToken}
+        generating={intakeGenerating}
+        onClose={() => { setIntakeModalOpen(false); setIntakeToken(null); }}
+      />
 
       {/* Schedule Modal */}
       <ScheduleAppointmentModal

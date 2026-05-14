@@ -231,38 +231,49 @@ export default function CalendarPage() {
   const [selected,    setSelected]    = useState<CalEvent | null>(null);
 
   useEffect(() => {
+    let mounted = true;
+
     async function load() {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('appointments')
-        .select(`
-          id, title, starts_at, ends_at, status, location,
-          appointment_types ( name, mode ),
-          clients ( id, name )
-        `)
-        .order('starts_at', { ascending: true });
+      try {
+        const { data, error } = await supabase
+          .from('appointments')
+          .select(`
+            id, title, starts_at, ends_at, status, location,
+            appointment_types ( name, mode ),
+            clients ( id, name )
+          `)
+          .order('starts_at', { ascending: true });
 
-      if (error) { console.error(error); setLoading(false); return; }
+        if (!mounted) return;
+        if (error) { console.error(error); setLoading(false); return; }
 
-      const mapped: CalEvent[] = (data ?? []).map((a: any) => ({
-        id:    a.id,
-        title: a.appointment_types?.name ?? a.title ?? 'Appointment',
-        start: new Date(a.starts_at),
-        end:   new Date(a.ends_at),
-        resource: {
-          clientId:   a.clients?.id   ?? '',
-          clientName: a.clients?.name ?? '—',
-          status:     a.status,
-          mode:       a.appointment_types?.mode ?? null,
-          location:   a.location,
-          typeName:   a.appointment_types?.name ?? a.title ?? 'Appointment',
-        },
-      }));
+        const mapped: CalEvent[] = (data ?? []).map((a: any) => ({
+          id:    a.id,
+          title: a.appointment_types?.name ?? a.title ?? 'Appointment',
+          start: new Date(a.starts_at),
+          end:   new Date(a.ends_at),
+          resource: {
+            clientId:   a.clients?.id   ?? '',
+            clientName: a.clients?.name ?? '—',
+            status:     a.status,
+            mode:       a.appointment_types?.mode ?? null,
+            location:   a.location,
+            typeName:   a.appointment_types?.name ?? a.title ?? 'Appointment',
+          },
+        }));
 
-      setEvents(mapped);
-      setLoading(false);
+        setEvents(mapped);
+        setLoading(false);
+      } catch (err) {
+        if (!mounted) return;
+        console.error(err);
+        setLoading(false);
+      }
     }
+
     load();
+    return () => { mounted = false; };
   }, []);
 
   return (
