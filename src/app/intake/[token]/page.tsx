@@ -38,7 +38,7 @@ const STEP_LABELS = [
 ];
 
 const BIRTH_EXPERIENCE_OPTIONS = [
-  'First time birthing person',
+  'First time pregnancy',
   'Previous vaginal birth',
   'Previous C-section',
   'Previous VBAC',
@@ -247,7 +247,7 @@ export default function IntakePage() {
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   async function onSubmit(values: FormValues) {
-    if (!tokenRow) return;
+    if (step !== TOTAL_STEPS || !tokenRow) return;
     setSubmitStatus('submitting');
     setSubmitError('');
 
@@ -388,7 +388,9 @@ export default function IntakePage() {
             <StepIndicator current={step} />
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)}>
+          <form
+            onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
+          >
             <div className="px-8 pb-8">
 
               {/* ── Step 1: Contact & Care ──────────────────────────────────── */}
@@ -856,7 +858,8 @@ export default function IntakePage() {
                   </button>
                 ) : (
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={() => handleSubmit(onSubmit)()}
                     disabled={isSubmitting}
                     className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-semibold disabled:opacity-60 transition-colors"
                   >

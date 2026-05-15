@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const supabase = adminClient();
 
     // ── 1. Validate token server-side (simple lookup, no join) ───────────────
-
+console.log(token);
     const { data: tokenRow, error: tokenErr } = await supabase
       .from('intake_tokens')
       .select('id, client_id, expires_at, completed_at')

@@ -86,6 +86,19 @@ function parseCity(address: string): string {
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 export async function generateIntakeToken(clientId: string): Promise<string> {
+  // Return an existing active token if one already exists
+  const { data: existing } = await supabase
+    .from('intake_tokens')
+    .select('token')
+    .eq('client_id', clientId)
+    .is('completed_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.token) return existing.token as string;
+
   const { data, error } = await supabase
     .from('intake_tokens')
     .insert({ client_id: clientId })
