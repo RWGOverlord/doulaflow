@@ -11,6 +11,7 @@ function adminClient() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseCity(address: string): string {
@@ -32,6 +33,10 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = adminClient();
+
+    console.log('[intake] token received:', token?.slice(0, 8));
+    console.log('[intake] supabase url:', process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30));
+    console.log('[intake] has service key:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     // ── 1. Validate token server-side (simple lookup, no join) ───────────────
 console.log(token);
