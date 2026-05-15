@@ -25,11 +25,13 @@ const localizer = dateFnsLocalizer({
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type CalEvent = {
-  id:         string;
-  title:      string;
-  start:      Date;
-  end:        Date;
+  id:      string;
+  title:   string;
+  start:   Date;
+  end:     Date;
+  allDay?: boolean;
   resource: {
+    kind:       'appointment' | 'due_date';
     clientId:   string;
     clientName: string;
     status:     string;
@@ -41,7 +43,7 @@ type CalEvent = {
 
 type ViewType = 'month' | 'week' | 'day' | 'agenda';
 
-// ─── Status colors ────────────────────────────────────────────────────────────
+// ─── Colors ───────────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   scheduled: { bg: '#ecfdf5', border: '#10b981', text: '#065f46' },
@@ -49,12 +51,16 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }
   cancelled: { bg: '#fef2f2', border: '#f87171', text: '#991b1b' },
   no_show:   { bg: '#fffbeb', border: '#fbbf24', text: '#92400e' },
 };
-const DEFAULT_COLOR = { bg: '#ecfdf5', border: '#10b981', text: '#065f46' };
+const DEFAULT_COLOR  = { bg: '#ecfdf5', border: '#10b981', text: '#065f46' };
+const DUE_DATE_COLOR = { bg: '#fff1f2', border: '#f43f5e', text: '#9f1239' };
 
 // ─── Event style ─────────────────────────────────────────────────────────────
 
 function eventStyleGetter(event: CalEvent) {
-  const color = STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR;
+  const color = event.resource.kind === 'due_date'
+    ? DUE_DATE_COLOR
+    : (STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR);
+
   return {
     style: {
       backgroundColor: color.bg,
@@ -72,14 +78,11 @@ function eventStyleGetter(event: CalEvent) {
 
 // ─── Event detail popup ───────────────────────────────────────────────────────
 
-function EventPopup({
-  event,
-  onClose,
-}: {
-  event: CalEvent;
-  onClose: () => void;
-}) {
-  const color = STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR;
+function EventPopup({ event, onClose }: { event: CalEvent; onClose: () => void }) {
+  const isDueDate = event.resource.kind === 'due_date';
+  const color = isDueDate
+    ? DUE_DATE_COLOR
+    : (STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR);
 
   return (
     <div
@@ -96,15 +99,19 @@ function EventPopup({
         <div className="p-5 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-semibold text-sm">{event.resource.typeName}</div>
+              <div className="font-semibold text-sm">
+                {isDueDate ? 'Due Date' : event.resource.typeName}
+              </div>
               <div className="text-xs text-muted-foreground mt-0.5">{event.resource.clientName}</div>
             </div>
-            <span
-              className="rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize shrink-0"
-              style={{ backgroundColor: color.bg, color: color.text }}
-            >
-              {event.resource.status.replace('_', ' ')}
-            </span>
+            {!isDueDate && (
+              <span
+                className="rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize shrink-0"
+                style={{ backgroundColor: color.bg, color: color.text }}
+              >
+                {event.resource.status.replace('_', ' ')}
+              </span>
+            )}
           </div>
 
           <div className="space-y-1.5 text-sm">
@@ -114,13 +121,15 @@ function EventPopup({
               </svg>
               {format(event.start, 'EEEE, MMMM d, yyyy')}
             </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>
-              </svg>
-              {format(event.start, 'h:mm a')} – {format(event.end, 'h:mm a')}
-            </div>
-            {event.resource.mode && (
+            {!isDueDate && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>
+                </svg>
+                {format(event.start, 'h:mm a')} – {format(event.end, 'h:mm a')}
+              </div>
+            )}
+            {!isDueDate && event.resource.mode && (
               <div className="flex items-center gap-2 text-muted-foreground capitalize">
                 <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M3 3a1 1 0 011-1h8a1 1 0 011 1v8a1 1 0 01-1 1H4a1 1 0 01-1-1V3z"/>
@@ -128,7 +137,7 @@ function EventPopup({
                 {event.resource.mode.replace('_', '-')}
               </div>
             )}
-            {event.resource.location && (
+            {!isDueDate && event.resource.location && (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M8 2a4 4 0 00-4 4c0 3 4 8 4 8s4-5 4-8a4 4 0 00-4-4z"/><circle cx="8" cy="6" r="1.5"/>
@@ -224,11 +233,11 @@ function CalendarToolbar({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
-  const [events,      setEvents]      = useState<CalEvent[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [date,        setDate]        = useState(new Date());
-  const [view,        setView]        = useState<ViewType>('month');
-  const [selected,    setSelected]    = useState<CalEvent | null>(null);
+  const [events,   setEvents]   = useState<CalEvent[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [date,     setDate]     = useState(new Date());
+  const [view,     setView]     = useState<ViewType>('month');
+  const [selected, setSelected] = useState<CalEvent | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -236,24 +245,33 @@ export default function CalendarPage() {
     async function load() {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('appointments')
-          .select(`
-            id, title, starts_at, ends_at, status, location,
-            appointment_types ( name, mode ),
-            clients ( id, name )
-          `)
-          .order('starts_at', { ascending: true });
+        const [{ data: apptData, error: apptErr }, { data: clientData, error: clientErr }] =
+          await Promise.all([
+            supabase
+              .from('appointments')
+              .select(`
+                id, title, starts_at, ends_at, status, location,
+                appointment_types ( name, mode ),
+                clients ( id, name )
+              `)
+              .order('starts_at', { ascending: true }),
+            supabase
+              .from('clients')
+              .select('id, name, due_date')
+              .not('due_date', 'is', null),
+          ]);
 
         if (!mounted) return;
-        if (error) { console.error(error); setLoading(false); return; }
+        if (apptErr) console.error(apptErr);
+        if (clientErr) console.error(clientErr);
 
-        const mapped: CalEvent[] = (data ?? []).map((a: any) => ({
+        const apptEvents: CalEvent[] = (apptData ?? []).map((a: any) => ({
           id:    a.id,
           title: a.appointment_types?.name ?? a.title ?? 'Appointment',
           start: new Date(a.starts_at),
           end:   new Date(a.ends_at),
           resource: {
+            kind:       'appointment' as const,
             clientId:   a.clients?.id   ?? '',
             clientName: a.clients?.name ?? '—',
             status:     a.status,
@@ -263,7 +281,27 @@ export default function CalendarPage() {
           },
         }));
 
-        setEvents(mapped);
+        const dueDateEvents: CalEvent[] = (clientData ?? []).map((c: any) => {
+          const d = new Date(`${c.due_date}T12:00:00`);
+          return {
+            id:    `due-${c.id}`,
+            title: `${c.name} — Due Date`,
+            start: d,
+            end:   d,
+            allDay: true,
+            resource: {
+              kind:       'due_date' as const,
+              clientId:   c.id,
+              clientName: c.name,
+              status:     '',
+              mode:       null,
+              location:   null,
+              typeName:   'Due Date',
+            },
+          };
+        });
+
+        setEvents([...apptEvents, ...dueDateEvents]);
         setLoading(false);
       } catch (err) {
         if (!mounted) return;
@@ -276,6 +314,9 @@ export default function CalendarPage() {
     return () => { mounted = false; };
   }, []);
 
+  const apptCount    = events.filter(e => e.resource.kind === 'appointment').length;
+  const dueDateCount = events.filter(e => e.resource.kind === 'due_date').length;
+
   return (
     <div className="flex flex-col h-full">
 
@@ -285,7 +326,8 @@ export default function CalendarPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
           {!loading && (
             <p className="text-sm text-muted-foreground mt-0.5">
-              {events.length} appointment{events.length !== 1 ? 's' : ''} total
+              {apptCount} appointment{apptCount !== 1 ? 's' : ''}
+              {dueDateCount > 0 && ` · ${dueDateCount} due date${dueDateCount !== 1 ? 's' : ''}`}
             </p>
           )}
         </div>

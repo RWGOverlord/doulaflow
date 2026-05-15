@@ -421,6 +421,7 @@ function AppointmentsTab({ clientId, refreshKey }: { clientId: string; refreshKe
 }
 
 function NotesTab({ clientId }: { clientId: string }) {
+  const { user } = useAuth();
   const [notes, setNotes]       = useState<Note[]>([]);
   const [loading, setLoading]   = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -468,8 +469,8 @@ function NotesTab({ clientId }: { clientId: string }) {
     } else {
       const { data } = await supabase.from('notes').insert({
         client_id:  clientId,
-        org_id:     process.env.NEXT_PUBLIC_ORG_ID!,
-        created_by: process.env.NEXT_PUBLIC_USER_ID!,
+        org_id:     user?.orgId ?? '',
+        created_by: user?.id    ?? '',
         title:      title || null,
         body,
       }).select('id, title, body, created_at').single();
@@ -871,6 +872,7 @@ type Task = {
 };
 
 function TasksTab({ clientId }: { clientId: string }) {
+  const { user } = useAuth();
   const [tasks, setTasks]         = useState<Task[]>([]);
   const [loading, setLoading]     = useState(true);
   const [showForm, setShowForm]   = useState(false);
@@ -921,7 +923,7 @@ function TasksTab({ clientId }: { clientId: string }) {
     } else {
       const { data } = await supabase.from('tasks').insert({
         client_id:   clientId,
-        org_id:      process.env.NEXT_PUBLIC_ORG_ID!,
+        org_id:      user?.orgId ?? '',
         title:       title.trim(),
         description: description.trim() || null,
         deadline:    deadline || null,

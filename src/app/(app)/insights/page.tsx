@@ -18,7 +18,7 @@ type UpcomingAppt = {
 };
 
 type PackageRow = {
-  status: string;
+  is_active: boolean;
   packages: { price: number | null } | null;
 };
 
@@ -120,7 +120,7 @@ export default function InsightsPage() {
             .order('starts_at', { ascending: true }),
           supabase
             .from('client_packages')
-            .select('status, packages(price)')
+            .select('is_active, packages(price)')
             .eq('doula_id', doulaId),
         ]);
 
@@ -139,10 +139,9 @@ export default function InsightsPage() {
         // Revenue
         const pkgs = (packagesRes.data ?? []) as unknown as PackageRow[];
         const activeRevenue = pkgs
-          .filter(p => p.status === 'active')
+          .filter(p => p.is_active)
           .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
         const totalRevenue = pkgs
-          .filter(p => p.status === 'active' || p.status === 'completed')
           .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
 
         setData({

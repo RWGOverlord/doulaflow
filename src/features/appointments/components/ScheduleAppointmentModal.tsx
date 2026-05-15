@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Clock, MapPin, Monitor, AlertCircle, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
+import { useAuth } from '@/lib/auth-context';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,6 +62,7 @@ interface Props {
 }
 
 export function ScheduleAppointmentModal({ open, onClose, clientId, onSaved }: Props) {
+  const { user } = useAuth();
   const [availableTypes, setAvailableTypes] = useState<AvailableType[]>([]);
   const [selectedType,   setSelectedType]   = useState<AvailableType | null>(null);
   const [loading,        setLoading]        = useState(true);
@@ -103,8 +105,8 @@ export function ScheduleAppointmentModal({ open, onClose, clientId, onSaved }: P
     setSaving(true);
     setError(null);
 
-    const doulaId = process.env.NEXT_PUBLIC_USER_ID!;
-    const orgId   = process.env.NEXT_PUBLIC_ORG_ID!;
+    const doulaId = user?.id    ?? '';
+    const orgId   = user?.orgId ?? '';
     const startsAt = toISODateTime(values.date, values.time);
     const endsAt   = addMinutes(values.date, values.time, selectedType.duration_minutes);
 

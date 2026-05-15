@@ -16,21 +16,25 @@ export function ClientList({ clients }: { clients: (ClientListRow & any)[] }) {
 
   return (
     <div className="rounded-xl border bg-background overflow-hidden">
-      {/* Table header */}
-      <div className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto] gap-4 px-4 py-2.5 border-b bg-muted/40">
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Client</span>
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Due Date</span>
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Next Appt</span>
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Services</span>
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</span>
-        <span className="w-8" />
-      </div>
+      <div className="overflow-x-auto">
+        <div className="min-w-[700px]">
+          {/* Table header */}
+          <div className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto] gap-4 px-4 py-2.5 border-b bg-muted/40">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Client</span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Due Date</span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Next Appt</span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Services</span>
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</span>
+            <span className="w-8" />
+          </div>
 
-      {/* Rows */}
-      <div className="divide-y">
-        {clients.map((c) => (
-          <ClientListItem key={c.id} client={c as any} />
-        ))}
+          {/* Rows */}
+          <div className="divide-y">
+            {clients.map((c) => (
+              <ClientListItem key={c.id} client={c as any} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

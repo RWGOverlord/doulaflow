@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabaseClient';
-import { getDoulaId } from '@/lib/getDoulaId';
+import { useAuth } from '@/lib/auth-context';
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../types';
 import clsx from 'clsx';
 
@@ -75,6 +75,7 @@ function Stepper({ step }: { step: number }) {
 
 export default function NewClientWizard() {
   const router = useRouter();
+  const { user } = useAuth();
   const [step, setStep] = React.useState(1);
   const [packages, setPackages] = React.useState<PackageSummary[]>([]);
   const [addOns, setAddOns] = React.useState<AddOn[]>([]);
@@ -136,8 +137,8 @@ export default function NewClientWizard() {
     setError(null);
 
     try {
-      const orgId    = process.env.NEXT_PUBLIC_ORG_ID;
-      const doulaId  = await getDoulaId();
+      const orgId   = user?.orgId ?? '';
+      const doulaId = user?.id    ?? '';
 
       if (!orgId || !doulaId) {
         setError('Could not resolve your user ID. Please refresh and try again.');

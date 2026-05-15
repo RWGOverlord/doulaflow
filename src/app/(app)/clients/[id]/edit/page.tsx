@@ -4,6 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,12 +14,15 @@ import { clientSchema, type ClientFormValues, SERVICE_TYPES, SERVICE_TYPE_LABELS
 import { listPackages, type PackageSummary } from '@/features/packages/api/packages.api';
 import { listAddOns, type AddOn } from '@/features/add-ons/api/add_ons.api';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/auth-context';
 import { ArrowLeft, User, Baby, Package, FileText } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   const [packages, setPackages]                 = useState<PackageSummary[]>([]);
   const [currentPackageId, setCurrentPackageId] = useState<string | null>(null);
@@ -121,7 +125,8 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
     setError(null);
     setSuccess(false);
     setIsSaving(true);
-    const doulaId = process.env.NEXT_PUBLIC_USER_ID!;
+    const doulaId = user?.id ?? '';
+    const orgId   = user?.orgId ?? '';
 
     try {
       const { error: clientError } = await supabase
@@ -157,7 +162,6 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
       // Replace client add-ons: delete existing then insert current selections
       await supabase.from('client_add_ons').delete().eq('client_id', id);
       if (selectedAddOns.length > 0) {
-        const orgId = process.env.NEXT_PUBLIC_ORG_ID!;
         await supabase.from('client_add_ons').insert(
           selectedAddOns.map(a => ({
             client_id: id,
@@ -167,6 +171,12 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
           }))
         );
       }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['clients'] }),
+        queryClient.invalidateQueries({ queryKey: ['clients:listview'] }),
+        queryClient.invalidateQueries({ queryKey: ['client:profile', id] }),
+      ]);
 
       setSuccess(true);
       setTimeout(() => router.push(`/clients/${id}`), 800);
