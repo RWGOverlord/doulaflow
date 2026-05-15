@@ -1094,7 +1094,9 @@ function TaskRow({
 
 // ─── Intake Link Modal ────────────────────────────────────────────────────────
 
-const INTAKE_BASE_URL = 'https://app.laquintanadoulacare.com/intake';
+const INTAKE_BASE_URL = typeof window !== 'undefined'
+  ? `${window.location.origin}/intake`
+  : 'https://app.laquintanadoulacare.com/intake';
 
 function IntakeLinkModal({
   open,

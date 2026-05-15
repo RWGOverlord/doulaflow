@@ -32,14 +32,18 @@ class ErrorBoundary extends Component<
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, profileError } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
+    // Only redirect when auth is fully resolved, there is no user, AND the
+    // absence of a user is not due to a profile load error. A profileError means
+    // a valid Supabase session exists but the DB profile failed — redirecting to
+    // /login in that state creates a silent lockout loop.
+    if (!loading && !user && !profileError) {
       router.replace('/login');
     }
-  }, [user, loading, router]);
+  }, [user, loading, profileError, router]);
 
   // Show skeleton while session is rehydrating
   if (loading) {
@@ -48,6 +52,18 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         <div className="w-56 border-r bg-background shrink-0" />
         <div className="flex-1 flex items-center justify-center">
           <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Profile loaded but DB row missing or errored — show message, don't redirect
+  if (profileError) {
+    return (
+      <div className="flex h-screen items-center justify-center px-4">
+        <div className="max-w-sm text-center space-y-3">
+          <h2 className="text-lg font-semibold">Unable to load account</h2>
+          <p className="text-sm text-muted-foreground">{profileError}</p>
         </div>
       </div>
     );

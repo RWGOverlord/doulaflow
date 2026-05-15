@@ -1,7 +1,7 @@
 // src/app/login/page.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/auth-context';
@@ -12,10 +12,17 @@ import { Label } from '@/components/ui/label';
 export default function LoginPage() {
   const router  = useRouter();
   const { user, loading } = useAuth();
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [error,    setError]    = useState<string | null>(null);
+  const [email,      setEmail]      = useState('');
+  const [password,   setPassword]   = useState('');
+  const [error,      setError]      = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (submitTimerRef.current) clearTimeout(submitTimerRef.current);
+    };
+  }, []);
 
   // If already logged in, redirect immediately
   useEffect(() => {
@@ -37,9 +44,13 @@ export default function LoginPage() {
     if (authError) {
       setError('Invalid email or password. Please try again.');
       setSubmitting(false);
+      return;
     }
+
     // AuthProvider's onAuthStateChange will update user state,
-    // which triggers the useEffect above to redirect
+    // which triggers the useEffect above to redirect.
+    // Reset submitting after 3s as a fallback if the redirect doesn't fire.
+    submitTimerRef.current = setTimeout(() => setSubmitting(false), 3000);
   }
 
   if (loading) return null;
