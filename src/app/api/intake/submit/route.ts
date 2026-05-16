@@ -107,7 +107,85 @@ console.log(token);
       return NextResponse.json({ error: clientErr.message }, { status: 500 });
     }
 
-    // ── 3 & 4. Upload PDF and insert document row ─────────────────────────────
+    // ── 3. Upsert all form data into client_intake_forms ─────────────────────
+
+    const { error: intakeFormErr } = await supabase
+      .from('client_intake_forms')
+      .upsert({
+        org_id:           orgId,
+        client_id:        clientId,
+        intake_token_id:  tokenRow.id,
+
+        // Contact
+        name:                     formData.name,
+        address:                  formData.address,
+        email:                    formData.email,
+        phone:                    formData.phone,
+        partner_name:             formData.partner_name,
+        partner_email:            formData.partner_email,
+        partner_phone:            formData.partner_phone,
+        preferred_contact_method: formData.preferred_contact,
+        emergency_contact:        formData.emergency_contact,
+
+        // Care team
+        provider_name:               formData.provider_name,
+        birth_location:              formData.birth_location,
+        chose_provider_specifically: formData.provider_chosen_specifically,
+        comfortable_with_provider:   formData.comfortable_with_provider,
+
+        // Pregnancy
+        due_date:                  formData.due_date || null,
+        expecting_multiples:       formData.expecting_multiples
+                                     ? parseInt(formData.expecting_multiples)
+                                     : null,
+        baby_gender:               formData.baby_gender,
+        baby_name:                 formData.baby_name,
+        pregnancy_experience:      formData.pregnancy_experience,
+        current_health_conditions: formData.current_health_conditions,
+        pregnancy_number:          formData.pregnancy_number,
+        previous_births:           formData.previous_births,
+        birth_experiences:         formData.birth_experiences,
+        previous_labor_length:     formData.previous_labor_length,
+        past_pregnancy_conditions: formData.past_pregnancy_health_conditions,
+
+        // Medical
+        medical_history: formData.medical_history,
+
+        // Birth preferences
+        birth_preparation:                formData.birth_preparation,
+        birth_vision:                     formData.birth_vision,
+        has_birth_plan:                   formData.has_birth_plan,
+        shared_preferences_with_provider: formData.shared_preferences_with_provider,
+        provider_knows_doula:             formData.provider_knows_doula,
+        early_labor_contact:              formData.early_labor_contact_timing,
+        post_dates_protocols:             formData.post_dates_protocols,
+        partner_role:                     formData.partner_role_at_birth,
+        additional_birth_attendees:       formData.additional_birth_attendees,
+        unwanted_attendees:               formData.people_not_at_birth,
+
+        // Support
+        fears_concerns:             formData.fears_or_concerns,
+        religious_cultural_beliefs: formData.religious_cultural_beliefs,
+        comforting_in_pain:         formData.comforting_in_pain,
+        doula_support_vision:       formData.how_doula_helps_most,
+
+        // Postpartum
+        nursing_experience: formData.nursing_experience,
+        feeding_concerns:   formData.feeding_concerns,
+        postpartum_support: formData.postpartum_support,
+
+        // Additional
+        additional_questions: formData.additional_questions,
+
+        submitted_at: new Date().toISOString(),
+      }, { onConflict: 'client_id' });
+
+    if (intakeFormErr) {
+      console.error('[intake/submit] intake form upsert failed', intakeFormErr);
+      // Non-fatal: client record and PDF still succeed
+    }
+
+    // ── 4 & 5. Upload PDF and insert document row ─────────────────────────────
 
     let pdfUploaded = false;
 
@@ -154,7 +232,7 @@ console.log(token);
       }
     }
 
-    // ── 5. Mark token as completed ────────────────────────────────────────────
+    // ── 6. Mark token as completed ────────────────────────────────────────────
 
     const { error: tokenUpdateErr } = await supabase
       .from('intake_tokens')

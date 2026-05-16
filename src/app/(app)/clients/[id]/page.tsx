@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Plus, Upload, Download, Trash2, Users, Clock, Pencil, Link2, Copy, CheckCheck, Loader2, Mail } from 'lucide-react';
-import { generateIntakeToken } from '@/features/intake/api/intake.api';
+import { generateIntakeToken, getClientIntakeForm, upsertClientIntakeForm, type ClientIntakeForm } from '@/features/intake/api/intake.api';
 import { useForm } from 'react-hook-form';
 import {
   listDocuments, uploadDocument, deleteDocument, getDownloadUrl,
@@ -28,6 +28,7 @@ import clsx from 'clsx';
 type Appointment = {
   id: string;
   title: string | null;
+  appointment_type_id: number | null;
   starts_at: string;
   ends_at: string;
   status: string;
@@ -82,7 +83,8 @@ const APPT_STATUS: Record<string, { bg: string; text: string; dot: string }> = {
 };
 
 function ApptCard({ appt, onEdit }: { appt: Appointment; onEdit?: () => void }) {
-  const pill  = APPT_STATUS[appt.status] ?? APPT_STATUS.scheduled;
+  const pill    = APPT_STATUS[appt.status] ?? APPT_STATUS.scheduled;
+  const isAdhoc = appt.appointment_type_id === null;
   const d     = new Date(appt.starts_at);
   const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
   const day   = d.getDate();
@@ -94,7 +96,14 @@ function ApptCard({ appt, onEdit }: { appt: Appointment; onEdit?: () => void }) 
         <div className="text-xl font-semibold leading-tight text-primary">{day}</div>
       </div>
       <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm">{appt.appointment_types?.name ?? appt.title ?? 'Appointment'}</div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="font-medium text-sm">{appt.appointment_types?.name ?? appt.title ?? 'Appointment'}</div>
+          {isAdhoc && (
+            <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+              External
+            </span>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground mt-0.5">
           {fmtTime(appt.starts_at)}
           {appt.appointment_types?.duration_minutes && ` · ${appt.appointment_types.duration_minutes} min`}
@@ -196,6 +205,8 @@ type EditApptFormValues = {
   status:   string;
   location: string;
   notes:    string;
+  title:    string;
+  duration: string;
 };
 
 function EditAppointmentModal({
@@ -212,26 +223,35 @@ function EditAppointmentModal({
   const [error,    setError]    = useState<string | null>(null);
 
   const { register, handleSubmit, reset, watch } = useForm<EditApptFormValues>({
-    defaultValues: { date: '', time: '10:00', status: 'scheduled', location: '', notes: '' },
+    defaultValues: { date: '', time: '10:00', status: 'scheduled', location: '', notes: '', title: '', duration: '60' },
   });
 
-  const watchDate = watch('date');
-  const watchTime = watch('time');
+  const watchDate     = watch('date');
+  const watchTime     = watch('time');
+  const watchDuration = watch('duration');
 
   useEffect(() => {
     if (!appt) return;
     const d = new Date(appt.starts_at);
+    const computedDuration = Math.round(
+      (new Date(appt.ends_at).getTime() - d.getTime()) / 60_000
+    );
     reset({
-      date:     d.toLocaleDateString('en-CA'),         // YYYY-MM-DD in local tz
+      date:     d.toLocaleDateString('en-CA'),
       time:     `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`,
       status:   appt.status,
       location: appt.location ?? '',
       notes:    appt.notes ?? '',
+      title:    appt.title ?? '',
+      duration: String(computedDuration || 60),
     });
     setError(null);
   }, [appt, reset]);
 
-  const durationMins = appt?.appointment_types?.duration_minutes ?? 60;
+  const isAdhoc      = appt?.appointment_type_id === null;
+  const durationMins = isAdhoc
+    ? (Number(watchDuration) || 60)
+    : (appt?.appointment_types?.duration_minutes ?? 60);
 
   const endPreview = watchDate && watchTime
     ? new Date(new Date(`${watchDate}T${watchTime}:00`).getTime() + durationMins * 60_000)
@@ -243,11 +263,18 @@ function EditAppointmentModal({
     setSaving(true); setError(null);
     const startsAt = new Date(`${values.date}T${values.time}:00`).toISOString();
     const endsAt   = new Date(new Date(startsAt).getTime() + durationMins * 60_000).toISOString();
+    const update: Record<string, any> = {
+      starts_at: startsAt, ends_at: endsAt,
+      status:    values.status,
+      location:  values.location || null,
+      notes:     values.notes    || null,
+    };
+    if (isAdhoc) update.title = values.title || null;
     const { data, error: err } = await supabase
       .from('appointments')
-      .update({ starts_at: startsAt, ends_at: endsAt, status: values.status, location: values.location || null, notes: values.notes || null })
+      .update(update)
       .eq('id', appt.id)
-      .select('id, title, starts_at, ends_at, status, location, notes, appointment_types(name, duration_minutes, mode)')
+      .select('id, title, appointment_type_id, starts_at, ends_at, status, location, notes, appointment_types(name, duration_minutes, mode)')
       .single();
     setSaving(false);
     if (err) { setError(err.message); return; }
@@ -273,9 +300,21 @@ function EditAppointmentModal({
         </DialogHeader>
         {appt && (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-1">
-            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm font-medium">
-              {appt.appointment_types?.name ?? appt.title ?? 'Appointment'}
-            </div>
+            {isAdhoc ? (
+              <div className="space-y-1.5">
+                <Label>Appointment Title</Label>
+                <div className="flex items-center gap-2">
+                  <Input {...register('title')} className="flex-1" />
+                  <span className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-sky-700 shrink-0">
+                    External
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-md bg-muted/40 px-3 py-2 text-sm font-medium">
+                {appt.appointment_types?.name ?? appt.title ?? 'Appointment'}
+              </div>
+            )}
 
             {error && (
               <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">{error}</div>
@@ -291,6 +330,13 @@ function EditAppointmentModal({
                 <Input type="time" {...register('time', { required: true })} />
               </div>
             </div>
+
+            {isAdhoc && (
+              <div className="space-y-1.5">
+                <Label>Duration (minutes)</Label>
+                <Input type="number" min="1" {...register('duration')} />
+              </div>
+            )}
 
             {endPreview && (
               <div className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -354,7 +400,7 @@ function AppointmentsTab({ clientId, refreshKey }: { clientId: string; refreshKe
     setLoading(true);
     supabase
       .from('appointments')
-      .select(`id, title, starts_at, ends_at, status, location, notes,
+      .select(`id, title, appointment_type_id, starts_at, ends_at, status, location, notes,
         appointment_types ( name, duration_minutes, mode )`)
       .eq('client_id', clientId)
       .order('starts_at', { ascending: true })
@@ -1158,13 +1204,633 @@ function IntakeLinkModal({
   );
 }
 
+// ─── Intake Form Tab ──────────────────────────────────────────────────────────
+
+type IntakeFormValues = {
+  preferred_contact_method: string;
+  emergency_contact: string;
+  provider_name: string;
+  birth_location: string;
+  chose_provider_specifically: string;
+  comfortable_with_provider: string;
+  due_date: string;
+  expecting_multiples: string;
+  baby_gender: string;
+  baby_name: string;
+  pregnancy_experience: string;
+  current_health_conditions: string;
+  pregnancy_number: string;
+  previous_births: string;
+  birth_experiences: string[];
+  previous_labor_length: string;
+  past_pregnancy_conditions: string;
+  medical_history: string;
+  birth_preparation: string;
+  birth_vision: string;
+  has_birth_plan: string;
+  shared_preferences_with_provider: string;
+  provider_knows_doula: string;
+  early_labor_contact: string;
+  post_dates_protocols: string;
+  partner_role: string;
+  additional_birth_attendees: string;
+  unwanted_attendees: string;
+  fears_concerns: string;
+  religious_cultural_beliefs: string;
+  comforting_in_pain: string;
+  doula_support_vision: string;
+  nursing_experience: string;
+  feeding_concerns: string;
+  postpartum_support: string;
+  additional_questions: string;
+};
+
+const BIRTH_EXPERIENCE_OPTIONS = [
+  'This will be my first birth',
+  'Vaginal',
+  'Cesarean',
+  'VBAC',
+  'Elective induction',
+  'Induction for medical reasons',
+  'Home birth',
+  'Hospital birth',
+  'Birth center birth',
+  'Water birth',
+  'Breech birth',
+];
+
+function buildIntakeFormValues(form: ClientIntakeForm | null): IntakeFormValues {
+  return {
+    preferred_contact_method:        form?.preferred_contact_method       ?? '',
+    emergency_contact:               form?.emergency_contact              ?? '',
+    provider_name:                   form?.provider_name                  ?? '',
+    birth_location:                  form?.birth_location                 ?? '',
+    chose_provider_specifically:     form?.chose_provider_specifically    ?? '',
+    comfortable_with_provider:       form?.comfortable_with_provider      ?? '',
+    due_date:                        form?.due_date?.substring(0, 10)     ?? '',
+    expecting_multiples:             form?.expecting_multiples != null ? String(form.expecting_multiples) : '',
+    baby_gender:                     form?.baby_gender                    ?? '',
+    baby_name:                       form?.baby_name                      ?? '',
+    pregnancy_experience:            form?.pregnancy_experience           ?? '',
+    current_health_conditions:       form?.current_health_conditions      ?? '',
+    pregnancy_number:                form?.pregnancy_number               ?? '',
+    previous_births:                 form?.previous_births                ?? '',
+    birth_experiences:               form?.birth_experiences
+                                       ? form.birth_experiences.split(',').map(s => s.trim()).filter(Boolean)
+                                       : [],
+    previous_labor_length:           form?.previous_labor_length          ?? '',
+    past_pregnancy_conditions:       form?.past_pregnancy_conditions      ?? '',
+    medical_history:                 form?.medical_history                ?? '',
+    birth_preparation:               form?.birth_preparation              ?? '',
+    birth_vision:                    form?.birth_vision                   ?? '',
+    has_birth_plan:                  form?.has_birth_plan                 ?? '',
+    shared_preferences_with_provider: form?.shared_preferences_with_provider ?? '',
+    provider_knows_doula:            form?.provider_knows_doula           ?? '',
+    early_labor_contact:             form?.early_labor_contact            ?? '',
+    post_dates_protocols:            form?.post_dates_protocols           ?? '',
+    partner_role:                    form?.partner_role                   ?? '',
+    additional_birth_attendees:      form?.additional_birth_attendees     ?? '',
+    unwanted_attendees:              form?.unwanted_attendees             ?? '',
+    fears_concerns:                  form?.fears_concerns                 ?? '',
+    religious_cultural_beliefs:      form?.religious_cultural_beliefs     ?? '',
+    comforting_in_pain:              form?.comforting_in_pain             ?? '',
+    doula_support_vision:            form?.doula_support_vision           ?? '',
+    nursing_experience:              form?.nursing_experience             ?? '',
+    feeding_concerns:                form?.feeding_concerns               ?? '',
+    postpartum_support:              form?.postpartum_support             ?? '',
+    additional_questions:            form?.additional_questions           ?? '',
+  };
+}
+
+function IntakeField({ label, value }: { label?: string; value?: string | null }) {
+  if (!label) return <div className="text-sm leading-relaxed whitespace-pre-wrap">{value || '—'}</div>;
+  return (
+    <div>
+      <div className="text-xs font-medium text-muted-foreground mb-0.5">{label}</div>
+      <div className="text-sm leading-relaxed whitespace-pre-wrap">{value || '—'}</div>
+    </div>
+  );
+}
+
+function IntakePills({ value }: { value?: string | null }) {
+  const items = value ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
+  if (!items.length) return <span className="text-sm">—</span>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map(item => (
+        <span key={item} className="inline-flex items-center rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+          {item}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function IntakeSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border bg-background overflow-hidden">
+      <div className="px-5 py-3 border-b">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
+      </div>
+      <div className="px-5 py-4 space-y-4">{children}</div>
+    </div>
+  );
+}
+
+function IntakeFormEditModal({
+  open, clientId, orgId, form, onClose, onSaved,
+}: {
+  open:     boolean;
+  clientId: string;
+  orgId:    string;
+  form:     ClientIntakeForm | null;
+  onClose:  () => void;
+  onSaved:  (updated: ClientIntakeForm) => void;
+}) {
+  const [vals, setVals]   = useState<IntakeFormValues>(() => buildIntakeFormValues(form));
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setVals(buildIntakeFormValues(form));
+      setError(null);
+    }
+  }, [open, form]);
+
+  function set(key: keyof IntakeFormValues, value: string) {
+    setVals(prev => ({ ...prev, [key]: value }));
+  }
+
+  function toggleBirthExp(option: string) {
+    setVals(prev => {
+      const updated = prev.birth_experiences.includes(option)
+        ? prev.birth_experiences.filter(x => x !== option)
+        : [...prev.birth_experiences, option];
+      return { ...prev, birth_experiences: updated };
+    });
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: Partial<ClientIntakeForm> = {
+        preferred_contact_method:         vals.preferred_contact_method         || null,
+        emergency_contact:                vals.emergency_contact                || null,
+        provider_name:                    vals.provider_name                    || null,
+        birth_location:                   vals.birth_location                   || null,
+        chose_provider_specifically:      vals.chose_provider_specifically      || null,
+        comfortable_with_provider:        vals.comfortable_with_provider        || null,
+        due_date:                         vals.due_date                         || null,
+        expecting_multiples:              vals.expecting_multiples ? parseInt(vals.expecting_multiples) : null,
+        baby_gender:                      vals.baby_gender                      || null,
+        baby_name:                        vals.baby_name                        || null,
+        pregnancy_experience:             vals.pregnancy_experience             || null,
+        current_health_conditions:        vals.current_health_conditions        || null,
+        pregnancy_number:                 vals.pregnancy_number                 || null,
+        previous_births:                  vals.previous_births                  || null,
+        birth_experiences:                vals.birth_experiences.length > 0 ? vals.birth_experiences.join(', ') : null,
+        previous_labor_length:            vals.previous_labor_length            || null,
+        past_pregnancy_conditions:        vals.past_pregnancy_conditions        || null,
+        medical_history:                  vals.medical_history                  || null,
+        birth_preparation:                vals.birth_preparation                || null,
+        birth_vision:                     vals.birth_vision                     || null,
+        has_birth_plan:                   vals.has_birth_plan                   || null,
+        shared_preferences_with_provider: vals.shared_preferences_with_provider || null,
+        provider_knows_doula:             vals.provider_knows_doula             || null,
+        early_labor_contact:              vals.early_labor_contact              || null,
+        post_dates_protocols:             vals.post_dates_protocols             || null,
+        partner_role:                     vals.partner_role                     || null,
+        additional_birth_attendees:       vals.additional_birth_attendees       || null,
+        unwanted_attendees:               vals.unwanted_attendees               || null,
+        fears_concerns:                   vals.fears_concerns                   || null,
+        religious_cultural_beliefs:       vals.religious_cultural_beliefs       || null,
+        comforting_in_pain:               vals.comforting_in_pain               || null,
+        doula_support_vision:             vals.doula_support_vision             || null,
+        nursing_experience:               vals.nursing_experience               || null,
+        feeding_concerns:                 vals.feeding_concerns                 || null,
+        postpartum_support:               vals.postpartum_support               || null,
+        additional_questions:             vals.additional_questions             || null,
+      };
+      const result = await upsertClientIntakeForm(clientId, orgId, payload);
+      onSaved(result);
+    } catch (err: any) {
+      setError(err?.message ?? 'Save failed. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const ta = (key: keyof IntakeFormValues, rows: number) => (
+    <textarea
+      className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring resize-none"
+      rows={rows}
+      value={vals[key] as string}
+      onChange={e => set(key, e.target.value)}
+    />
+  );
+
+  const sel = (key: keyof IntakeFormValues, options: { value: string; label: string }[]) => (
+    <select
+      className="w-full rounded-md border bg-background px-3 py-2 text-sm h-9"
+      value={vals[key] as string}
+      onChange={e => set(key, e.target.value)}
+    >
+      <option value="">—</option>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={o => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
+          <DialogTitle>Edit Intake Form</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {error && (
+            <div className="mb-4 rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">{error}</div>
+          )}
+
+          <div className="space-y-7">
+
+            {/* Contact Details */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Contact Details</h3>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Preferred contact method</Label>
+                  {sel('preferred_contact_method', [
+                    { value: 'Phone', label: 'Phone' },
+                    { value: 'Email', label: 'Email' },
+                    { value: 'Text',  label: 'Text'  },
+                    { value: 'Any',   label: 'Any'   },
+                  ])}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Emergency contact</Label>
+                  <Input value={vals.emergency_contact} onChange={e => set('emergency_contact', e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            {/* Care Team */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Care Team</h3>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Midwife / OBGYN name</Label>
+                  <Input value={vals.provider_name} onChange={e => set('provider_name', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Delivery location</Label>
+                  <Input value={vals.birth_location} onChange={e => set('birth_location', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Did you specifically choose your provider?</Label>
+                  {sel('chose_provider_specifically', [
+                    { value: 'Yes',    label: 'Yes'    },
+                    { value: 'No',     label: 'No'     },
+                    { value: 'Unsure', label: 'Unsure' },
+                  ])}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Are you comfortable with your provider?</Label>
+                  {sel('comfortable_with_provider', [
+                    { value: 'Yes',    label: 'Yes'    },
+                    { value: 'No',     label: 'No'     },
+                    { value: 'Unsure', label: 'Unsure' },
+                  ])}
+                </div>
+              </div>
+            </div>
+
+            {/* Pregnancy Details */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Pregnancy Details</h3>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Estimated due date</Label>
+                  <Input type="date" value={vals.due_date} onChange={e => set('due_date', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>If expecting multiples, how many?</Label>
+                  <Input type="number" min="2" placeholder="e.g. 2" value={vals.expecting_multiples} onChange={e => set('expecting_multiples', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Baby&apos;s gender</Label>
+                  {sel('baby_gender', [
+                    { value: 'Male',     label: 'Male'     },
+                    { value: 'Female',   label: 'Female'   },
+                    { value: 'Unknown',  label: 'Unknown'  },
+                    { value: 'Surprise', label: 'Surprise' },
+                    { value: 'Multiple', label: 'Multiple' },
+                  ])}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Have you chosen a name?</Label>
+                  <Input value={vals.baby_name} onChange={e => set('baby_name', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Overall, how has your pregnancy been?</Label>
+                  {ta('pregnancy_experience', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Current pregnancy-related health conditions</Label>
+                  {ta('current_health_conditions', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Pregnancy number</Label>
+                  <Input value={vals.pregnancy_number} onChange={e => set('pregnancy_number', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Number of previous births</Label>
+                  <Input value={vals.previous_births} onChange={e => set('previous_births', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Birth experiences</Label>
+                  <div className="space-y-2 pt-0.5">
+                    {BIRTH_EXPERIENCE_OPTIONS.map(opt => (
+                      <label key={opt} className="flex items-center gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="rounded border-muted-foreground/40"
+                          checked={vals.birth_experiences.includes(opt)}
+                          onChange={() => toggleBirthExp(opt)}
+                        />
+                        <span className="text-sm">{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>How long was your previous labor(s)?</Label>
+                  <Input value={vals.previous_labor_length} onChange={e => set('previous_labor_length', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Past pregnancy-related health conditions</Label>
+                  {ta('past_pregnancy_conditions', 3)}
+                </div>
+              </div>
+            </div>
+
+            {/* Medical History */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Medical History</h3>
+              {ta('medical_history', 4)}
+            </div>
+
+            {/* Birth Preferences */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Birth Preferences</h3>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>What have you done to prepare for birth?</Label>
+                  {ta('birth_preparation', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>What is your birth vision?</Label>
+                  {ta('birth_vision', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Do you have a birth plan?</Label>
+                  {sel('has_birth_plan', [
+                    { value: 'Yes',                       label: 'Yes'                       },
+                    { value: 'No',                        label: 'No'                        },
+                    { value: 'We will create one together', label: 'We will create one together' },
+                  ])}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Shared birth preferences with provider?</Label>
+                  {sel('shared_preferences_with_provider', [
+                    { value: 'Yes',     label: 'Yes'     },
+                    { value: 'No',      label: 'No'      },
+                    { value: 'Not yet', label: 'Not yet' },
+                  ])}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Does your provider know a doula will be present?</Label>
+                  {sel('provider_knows_doula', [
+                    { value: 'Yes',     label: 'Yes'     },
+                    { value: 'No',      label: 'No'      },
+                    { value: 'Not yet', label: 'Not yet' },
+                  ])}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>When does your provider want to be contacted in early labor?</Label>
+                  <Input value={vals.early_labor_contact} onChange={e => set('early_labor_contact', e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Post-dates protocols discussed with provider?</Label>
+                  {ta('post_dates_protocols', 2)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Partner&apos;s role at birth</Label>
+                  {ta('partner_role', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Additional birth attendees</Label>
+                  {ta('additional_birth_attendees', 2)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Anyone not wanted at birth</Label>
+                  {ta('unwanted_attendees', 2)}
+                </div>
+              </div>
+            </div>
+
+            {/* Support & Concerns */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Support & Concerns</h3>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Fears or concerns about this birth</Label>
+                  {ta('fears_concerns', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Religious or cultural beliefs</Label>
+                  {ta('religious_cultural_beliefs', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>What has been comforting in painful situations?</Label>
+                  {ta('comforting_in_pain', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>How do you envision doula support being most helpful?</Label>
+                  {ta('doula_support_vision', 3)}
+                </div>
+              </div>
+            </div>
+
+            {/* Postpartum */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Postpartum</h3>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Experience with nursing</Label>
+                  {ta('nursing_experience', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Concerns about feeding</Label>
+                  {ta('feeding_concerns', 3)}
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Postpartum support available</Label>
+                  {ta('postpartum_support', 3)}
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Notes */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4 pb-2 border-b">Additional Notes</h3>
+              <div className="space-y-1.5">
+                <Label>Additional questions or notes</Label>
+                {ta('additional_questions', 4)}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function IntakeFormTab({ clientId, orgId }: { clientId: string; orgId: string }) {
+  const [form, setForm]     = useState<ClientIntakeForm | null | undefined>(undefined);
+  const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    getClientIntakeForm(clientId)
+      .then(d => setForm(d))
+      .catch(() => setForm(null));
+  }, [clientId]);
+
+  if (form === undefined) return <div className="text-sm text-muted-foreground py-8 text-center">Loading…</div>;
+
+  if (!form) {
+    return (
+      <>
+        <div className="rounded-xl border border-dashed p-12 text-center">
+          <p className="text-sm font-medium text-muted-foreground">No intake form data yet</p>
+          <p className="text-xs text-muted-foreground mt-1">Send the client an intake form link or fill it in manually</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => setEditOpen(true)}>
+            Fill in manually
+          </Button>
+        </div>
+        <IntakeFormEditModal
+          open={editOpen}
+          clientId={clientId}
+          orgId={orgId}
+          form={null}
+          onClose={() => setEditOpen(false)}
+          onSaved={updated => { setForm(updated); setEditOpen(false); }}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-5">
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)} className="gap-1.5">
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </Button>
+        </div>
+
+        <IntakeSection title="Contact Details">
+          <IntakeField label="Preferred contact method" value={form.preferred_contact_method} />
+          <IntakeField label="Emergency contact" value={form.emergency_contact} />
+        </IntakeSection>
+
+        <IntakeSection title="Care Team">
+          <IntakeField label="Midwife / OBGYN name" value={form.provider_name} />
+          <IntakeField label="Delivery location" value={form.birth_location} />
+          <IntakeField label="Did you specifically choose your provider?" value={form.chose_provider_specifically} />
+          <IntakeField label="Are you comfortable with your provider?" value={form.comfortable_with_provider} />
+        </IntakeSection>
+
+        <IntakeSection title="Pregnancy Details">
+          <IntakeField label="Estimated due date" value={form.due_date ? fmtDate(form.due_date) : null} />
+          <IntakeField label="If expecting multiples, how many?" value={form.expecting_multiples != null ? String(form.expecting_multiples) : null} />
+          <IntakeField label="Baby's gender" value={form.baby_gender} />
+          <IntakeField label="Have you chosen a name?" value={form.baby_name} />
+          <IntakeField label="Overall, how has your pregnancy been?" value={form.pregnancy_experience} />
+          <IntakeField label="Current pregnancy-related health conditions" value={form.current_health_conditions} />
+          <IntakeField label="Pregnancy number" value={form.pregnancy_number} />
+          <IntakeField label="Number of previous births" value={form.previous_births} />
+          <div>
+            <div className="text-xs font-medium text-muted-foreground mb-1.5">Birth experiences</div>
+            <IntakePills value={form.birth_experiences} />
+          </div>
+          <IntakeField label="How long was your previous labor(s)?" value={form.previous_labor_length} />
+          <IntakeField label="Past pregnancy-related health conditions" value={form.past_pregnancy_conditions} />
+        </IntakeSection>
+
+        <IntakeSection title="Medical History">
+          <div className="text-sm leading-relaxed whitespace-pre-wrap">{form.medical_history || '—'}</div>
+        </IntakeSection>
+
+        <IntakeSection title="Birth Preferences">
+          <IntakeField label="What have you done to prepare for birth?" value={form.birth_preparation} />
+          <IntakeField label="What is your birth vision?" value={form.birth_vision} />
+          <IntakeField label="Do you have a birth plan?" value={form.has_birth_plan} />
+          <IntakeField label="Shared birth preferences with provider?" value={form.shared_preferences_with_provider} />
+          <IntakeField label="Does your provider know a doula will be present?" value={form.provider_knows_doula} />
+          <IntakeField label="When does your provider want to be contacted in early labor?" value={form.early_labor_contact} />
+          <IntakeField label="Post-dates protocols discussed with provider?" value={form.post_dates_protocols} />
+          <IntakeField label="Partner's role at birth" value={form.partner_role} />
+          <IntakeField label="Additional birth attendees" value={form.additional_birth_attendees} />
+          <IntakeField label="Anyone not wanted at birth" value={form.unwanted_attendees} />
+        </IntakeSection>
+
+        <IntakeSection title="Support & Concerns">
+          <IntakeField label="Fears or concerns about this birth" value={form.fears_concerns} />
+          <IntakeField label="Religious or cultural beliefs" value={form.religious_cultural_beliefs} />
+          <IntakeField label="What has been comforting in painful situations?" value={form.comforting_in_pain} />
+          <IntakeField label="How do you envision doula support being most helpful?" value={form.doula_support_vision} />
+        </IntakeSection>
+
+        <IntakeSection title="Postpartum">
+          <IntakeField label="Experience with nursing" value={form.nursing_experience} />
+          <IntakeField label="Concerns about feeding" value={form.feeding_concerns} />
+          <IntakeField label="Postpartum support available" value={form.postpartum_support} />
+        </IntakeSection>
+
+        <IntakeSection title="Additional Notes">
+          <div className="text-sm leading-relaxed whitespace-pre-wrap">{form.additional_questions || '—'}</div>
+        </IntakeSection>
+      </div>
+
+      <IntakeFormEditModal
+        open={editOpen}
+        clientId={clientId}
+        orgId={orgId}
+        form={form}
+        onClose={() => setEditOpen(false)}
+        onSaved={updated => { setForm(updated); setEditOpen(false); }}
+      />
+    </>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['appointments', 'notes', 'documents', 'packages', 'add-ons', 'tasks', 'birth'] as const;
+const TABS = ['appointments', 'intake', 'notes', 'documents', 'packages', 'add-ons', 'tasks', 'birth'] as const;
 type Tab = typeof TABS[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   appointments: 'Appointments',
+  intake:       'Intake Form',
   notes:        'Notes',
   documents:    'Documents',
   packages:     'Packages',
@@ -1297,6 +1963,7 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
 
           <div className="flex-1 overflow-y-auto p-6">
             {activeTab === 'appointments' && <AppointmentsTab clientId={id} refreshKey={apptRefreshKey} />}
+            {activeTab === 'intake'       && <IntakeFormTab clientId={id} orgId={user?.orgId ?? ''} />}
             {activeTab === 'notes'        && <NotesTab clientId={id} />}
             {activeTab === 'documents'    && <DocumentsTab clientId={id} clientName={client.name} />}
             {activeTab === 'packages'     && <PackagesTab clientId={id} />}

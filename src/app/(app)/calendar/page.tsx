@@ -7,6 +7,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
@@ -38,6 +39,7 @@ type CalEvent = {
     mode:       string | null;
     location:   string | null;
     typeName:   string;
+    isAdhoc:    boolean;
   };
 };
 
@@ -53,13 +55,16 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }
 };
 const DEFAULT_COLOR  = { bg: '#ecfdf5', border: '#10b981', text: '#065f46' };
 const DUE_DATE_COLOR = { bg: '#fff1f2', border: '#f43f5e', text: '#9f1239' };
+const ADHOC_COLOR    = { bg: '#eff6ff', border: '#60a5fa', text: '#1d4ed8' };
 
 // ─── Event style ─────────────────────────────────────────────────────────────
 
 function eventStyleGetter(event: CalEvent) {
   const color = event.resource.kind === 'due_date'
     ? DUE_DATE_COLOR
-    : (STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR);
+    : event.resource.isAdhoc && event.resource.status === 'scheduled'
+      ? ADHOC_COLOR
+      : (STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR);
 
   return {
     style: {
@@ -82,7 +87,9 @@ function EventPopup({ event, onClose }: { event: CalEvent; onClose: () => void }
   const isDueDate = event.resource.kind === 'due_date';
   const color = isDueDate
     ? DUE_DATE_COLOR
-    : (STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR);
+    : event.resource.isAdhoc && event.resource.status === 'scheduled'
+      ? ADHOC_COLOR
+      : (STATUS_COLORS[event.resource.status] ?? DEFAULT_COLOR);
 
   return (
     <div
@@ -99,8 +106,15 @@ function EventPopup({ event, onClose }: { event: CalEvent; onClose: () => void }
         <div className="p-5 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="font-semibold text-sm">
-                {isDueDate ? 'Due Date' : event.resource.typeName}
+              <div className="flex items-center gap-2">
+                <div className="font-semibold text-sm">
+                  {isDueDate ? 'Due Date' : event.resource.typeName}
+                </div>
+                {!isDueDate && event.resource.isAdhoc && (
+                  <span className="inline-flex items-center rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-medium text-sky-700">
+                    External
+                  </span>
+                )}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">{event.resource.clientName}</div>
             </div>
@@ -233,6 +247,7 @@ function CalendarToolbar({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CalendarPage() {
+  const { user } = useAuth();
   const [events,   setEvents]   = useState<CalEvent[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [date,     setDate]     = useState(new Date());
@@ -240,6 +255,7 @@ export default function CalendarPage() {
   const [selected, setSelected] = useState<CalEvent | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     let mounted = true;
 
     async function load() {
@@ -250,14 +266,16 @@ export default function CalendarPage() {
             supabase
               .from('appointments')
               .select(`
-                id, title, starts_at, ends_at, status, location,
+                id, title, appointment_type_id, starts_at, ends_at, status, location,
                 appointment_types ( name, mode ),
                 clients ( id, name )
               `)
+              .eq('doula_id', user.id)
               .order('starts_at', { ascending: true }),
             supabase
               .from('clients')
               .select('id, name, due_date')
+              .eq('doula_id', user.id)
               .not('due_date', 'is', null),
           ]);
 
@@ -278,6 +296,7 @@ export default function CalendarPage() {
             mode:       a.appointment_types?.mode ?? null,
             location:   a.location,
             typeName:   a.appointment_types?.name ?? a.title ?? 'Appointment',
+            isAdhoc:    !a.appointment_type_id,
           },
         }));
 
@@ -297,6 +316,7 @@ export default function CalendarPage() {
               mode:       null,
               location:   null,
               typeName:   'Due Date',
+              isAdhoc:    false,
             },
           };
         });
@@ -312,7 +332,7 @@ export default function CalendarPage() {
 
     load();
     return () => { mounted = false; };
-  }, []);
+  }, [user]);
 
   const apptCount    = events.filter(e => e.resource.kind === 'appointment').length;
   const dueDateCount = events.filter(e => e.resource.kind === 'due_date').length;

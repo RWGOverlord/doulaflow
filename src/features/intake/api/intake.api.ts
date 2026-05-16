@@ -63,6 +63,59 @@ export type IntakeFormData = {
   additional_questions: string;       // "Any questions or anything else" → also saved to notes
 };
 
+export type ClientIntakeForm = {
+  id?: string;
+  org_id: string;
+  client_id: string;
+  intake_token_id?: string | null;
+  submitted_at?: string | null;
+  // Contact (managed on client record, not shown in display)
+  name?: string | null;
+  address?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  partner_name?: string | null;
+  partner_email?: string | null;
+  partner_phone?: string | null;
+  // Displayed fields
+  preferred_contact_method?: string | null;
+  emergency_contact?: string | null;
+  provider_name?: string | null;
+  birth_location?: string | null;
+  chose_provider_specifically?: string | null;
+  comfortable_with_provider?: string | null;
+  due_date?: string | null;
+  expecting_multiples?: number | null;
+  baby_gender?: string | null;
+  baby_name?: string | null;
+  pregnancy_experience?: string | null;
+  current_health_conditions?: string | null;
+  pregnancy_number?: string | null;
+  previous_births?: string | null;
+  birth_experiences?: string | null;
+  previous_labor_length?: string | null;
+  past_pregnancy_conditions?: string | null;
+  medical_history?: string | null;
+  birth_preparation?: string | null;
+  birth_vision?: string | null;
+  has_birth_plan?: string | null;
+  shared_preferences_with_provider?: string | null;
+  provider_knows_doula?: string | null;
+  early_labor_contact?: string | null;
+  post_dates_protocols?: string | null;
+  partner_role?: string | null;
+  additional_birth_attendees?: string | null;
+  unwanted_attendees?: string | null;
+  fears_concerns?: string | null;
+  religious_cultural_beliefs?: string | null;
+  comforting_in_pain?: string | null;
+  doula_support_vision?: string | null;
+  nursing_experience?: string | null;
+  feeding_concerns?: string | null;
+  postpartum_support?: string | null;
+  additional_questions?: string | null;
+};
+
 export type IntakeTokenRow = {
   id: string;
   client_id: string;
@@ -141,6 +194,30 @@ export async function getIntakeToken(token: string): Promise<IntakeTokenRow | nu
     created_at:   row.created_at,
     client_name:  row.clients?.name ?? '',
   };
+}
+
+export async function getClientIntakeForm(clientId: string): Promise<ClientIntakeForm | null> {
+  const { data, error } = await supabase
+    .from('client_intake_forms')
+    .select('*')
+    .eq('client_id', clientId)
+    .maybeSingle();
+  if (error) throw error;
+  return data as ClientIntakeForm | null;
+}
+
+export async function upsertClientIntakeForm(
+  clientId: string,
+  orgId: string,
+  data: Partial<ClientIntakeForm>,
+): Promise<ClientIntakeForm> {
+  const { data: result, error } = await supabase
+    .from('client_intake_forms')
+    .upsert({ ...data, client_id: clientId, org_id: orgId }, { onConflict: 'client_id' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return result as ClientIntakeForm;
 }
 
 export async function submitIntakeForm(

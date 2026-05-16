@@ -1,9 +1,11 @@
 # DoulaFlow — Known Bugs
-All Completed bugs should be moved from Active to Ready For Human Testing
+All Completed bugs should be moved from ##Active to ##Ready For Human Testing
 
 ## Active
 
+
 ## Ready For Human Testing
+- The calander is not filtering by doula_id. all doulas can see all appointments that aren't for thier clients.
 
 ## Fixed
 - Intake form submits on step 3 → added step guard in onSubmit so Enter key on earlier steps is ignored

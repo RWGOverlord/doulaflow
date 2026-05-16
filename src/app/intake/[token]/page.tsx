@@ -38,10 +38,17 @@ const STEP_LABELS = [
 ];
 
 const BIRTH_EXPERIENCE_OPTIONS = [
-  'First time pregnancy',
-  'Previous vaginal birth',
-  'Previous C-section',
-  'Previous VBAC',
+  'This will be my first birth',
+  'Vaginal',
+  'Cesarean',
+  'VBAC',
+  'Elective induction',
+  'Induction for medical reasons',
+  'Home birth',
+  'Hospital birth',
+  'Birth center birth',
+  'Water birth',
+  'Breech birth',
   'Previous loss / stillbirth',
   'Previous premature birth',
 ];
@@ -49,8 +56,9 @@ const BIRTH_EXPERIENCE_OPTIONS = [
 const CONTACT_OPTIONS = ['Phone call', 'Text message', 'Email', 'Any'];
 const YES_NO_UNSURE   = ['Yes', 'No', 'Unsure'];
 const YES_NO_NOTYET   = ['Yes', 'No', 'Not yet'];
-const BIRTH_PLAN_OPTS = ['Yes', 'No', 'In progress'];
-const GENDER_OPTIONS  = ['Boy', 'Girl', 'Not revealing yet', 'Unknown'];
+const YES_NO          = ['Yes', 'No'];
+const BIRTH_PLAN_OPTS = ['Yes', 'No'];
+const GENDER_OPTIONS  = ['Boy', 'Girl', 'Not revealing yet'];
 
 // ─── Small UI helpers ─────────────────────────────────────────────────────────
 
@@ -190,7 +198,7 @@ export default function IntakePage() {
   const [submitError, setSubmitError]   = useState('');
   const [step, setStep] = useState(1);
 
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, setValue, trigger, formState: { errors } } = useForm<FormValues>({
     defaultValues: {
       name: '', address: '', email: '', phone: '',
       partner_name: '', partner_email: '', partner_phone: '',
@@ -405,7 +413,7 @@ export default function IntakePage() {
                     talk about it at our next appointment)</em>
                   </div>
 
-                  <SectionHeading>Contact Information</SectionHeading>
+                  <SectionHeading>Contact information</SectionHeading>
 
                   <div>
                     <Label required>Name (client)</Label>
@@ -483,20 +491,20 @@ export default function IntakePage() {
                     <Label>Emergency Contact</Label>
                     <input
                       className={inputCls()}
-                      placeholder="Name & phone number"
+                      placeholder="Name, relationship, & phone number"
                       {...register('emergency_contact')}
                     />
                   </div>
 
-                  <SectionHeading>Care Team</SectionHeading>
+                  <SectionHeading>Care team</SectionHeading>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Midwife / OBGYN Name</Label>
+                      <Label>Midwife / OBGYN name</Label>
                       <input className={inputCls()} placeholder="Provider name" {...register('provider_name')} />
                     </div>
                     <div>
-                      <Label>Delivery Location</Label>
+                      <Label>Delivery location</Label>
                       <input className={inputCls()} placeholder="Hospital, birth center, home…" {...register('birth_location')} />
                     </div>
                   </div>
@@ -516,21 +524,27 @@ export default function IntakePage() {
                 </div>
               )}
 
-              {/* ── Step 2: Pregnancy Details ───────────────────────────────── */}
+              {/* ── Step 2: Pregnancy details ───────────────────────────────── */}
               {step === 2 && (
                 <div className="space-y-5">
-                  <SectionHeading>Pregnancy Details</SectionHeading>
+                  <SectionHeading>Pregnancy details</SectionHeading>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Estimated Due Date</Label>
+                      <Label>Estimated due date</Label>
                       <input type="date" className={inputCls()} {...register('due_date')} />
                     </div>
-                    <SelectField
-                      label="Expecting Multiples?"
-                      options={YES_NO_UNSURE}
-                      {...register('expecting_multiples')}
-                    />
+                    <div>
+                      <Label>If expecting multiples, how many?</Label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="10"
+                        className={inputCls()}
+                        placeholder="e.g. 2"
+                        {...register('expecting_multiples')}
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -541,8 +555,8 @@ export default function IntakePage() {
                       {...register('baby_gender')}
                     />
                     <div>
-                      <Label>Baby&rsquo;s Name (if chosen)</Label>
-                      <input className={inputCls()} placeholder="Optional" {...register('baby_name')} />
+                      <Label>Have you chosen a name?</Label>
+                      <input className={inputCls()} placeholder="If so, feel free to share if you wish!" {...register('baby_name')} />
                     </div>
                   </div>
 
@@ -551,24 +565,24 @@ export default function IntakePage() {
                     <textarea
                       className={inputCls()}
                       rows={3}
-                      placeholder="Tell me about your experience so far…"
+                      placeholder="Emotionally? Physically?"
                       {...register('pregnancy_experience')}
                     />
                   </div>
 
                   <div>
-                    <Label>Current Health Conditions</Label>
+                    <Label>Do you have any current pregnancy-related health conditions?</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
-                      placeholder="Any conditions related to this pregnancy…"
+                      placeholder="Please list them below"
                       {...register('current_health_conditions')}
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Pregnancy Number</Label>
+                      <Label>Pregnancy number</Label>
                       <input
                         className={inputCls()}
                         placeholder="e.g. 1st, 2nd, 3rd"
@@ -576,7 +590,7 @@ export default function IntakePage() {
                       />
                     </div>
                     <div>
-                      <Label>Number of Previous Births</Label>
+                      <Label>Number of previous births</Label>
                       <input
                         className={inputCls()}
                         placeholder="e.g. 0, 1, 2"
@@ -587,7 +601,7 @@ export default function IntakePage() {
 
                   {/* Multi-select birth experiences */}
                   <div>
-                    <Label>Birth Experiences (select all that apply)</Label>
+                    <Label>Birth experiences (select all that apply)</Label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
                       {BIRTH_EXPERIENCE_OPTIONS.map(opt => (
                         <label
@@ -612,7 +626,7 @@ export default function IntakePage() {
                   </div>
 
                   <div>
-                    <Label>Previous Labor Length</Label>
+                    <Label>How long was your previous labor(s)?</Label>
                     <input
                       className={inputCls()}
                       placeholder="e.g. 12 hours, N/A"
@@ -621,7 +635,7 @@ export default function IntakePage() {
                   </div>
 
                   <div>
-                    <Label>Past Pregnancy Health Conditions</Label>
+                    <Label>Please list any pregnancy-related health conditions you've had in the past</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
@@ -632,64 +646,64 @@ export default function IntakePage() {
                 </div>
               )}
 
-              {/* ── Step 3: Medical & Birth Preferences ────────────────────── */}
+              {/* ── Step 3: Medical & Birth preferences ────────────────────── */}
               {step === 3 && (
                 <div className="space-y-5">
-                  <SectionHeading>Medical History</SectionHeading>
+                  <SectionHeading>Medical history</SectionHeading>
 
                   <div>
-                    <Label>Medical History</Label>
+                    <Label>Medical history</Label>
                     <textarea
                       className={inputCls()}
                       rows={4}
-                      placeholder="Allergies, illnesses, current medications, surgeries, anything relevant…"
+                      placeholder="List any allergies, illnesses, surgeries, medications, medical conditions, or other health-related things that I may need to know."
                       {...register('medical_history')}
                     />
                   </div>
 
-                  <SectionHeading>Birth Preferences</SectionHeading>
+                  <SectionHeading>Birth preferences</SectionHeading>
 
                   <div>
-                    <Label>Birth Preparation</Label>
+                    <Label>What have you done, so far, to prepare for birth?</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
-                      placeholder="Childbirth classes, books, podcasts you've used…"
+                      placeholder="Birth classes? Reading? Exercise?"
                       {...register('birth_preparation')}
                     />
                   </div>
 
                   <div>
-                    <Label>Your Birth Vision</Label>
+                    <Label>What is your birth vision?</Label>
                     <textarea
                       className={inputCls()}
                       rows={3}
-                      placeholder="What does your ideal birth experience look like?"
+                      placeholder="If all could go perfectly, what would that look like for you?"
                       {...register('birth_vision')}
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <SelectField
-                      label="Do you have a birth plan?"
+                      label="Do you have a birth plan? (If not, we can create one together.)"
                       options={BIRTH_PLAN_OPTS}
                       {...register('has_birth_plan')}
                     />
                     <SelectField
-                      label="Shared preferences with provider?"
-                      options={YES_NO_NOTYET}
+                      label="Have you shared your birth preferences with your provider?"
+                      options={YES_NO}
                       {...register('shared_preferences_with_provider')}
                     />
                     <SelectField
-                      label="Provider knows doula will be present?"
-                      options={YES_NO_NOTYET}
+                      label="Does your provider know a doula will be present at birth?"
+                      options={YES_NO}
                       {...register('provider_knows_doula')}
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Early Labor Contact Timing</Label>
+                      <Label>During early labor, when does your provider want to be contacted?</Label>
                       <input
                         className={inputCls()}
                         placeholder="e.g. contractions 5-1-1, when water breaks"
@@ -697,7 +711,7 @@ export default function IntakePage() {
                       />
                     </div>
                     <div>
-                      <Label>Post-Dates Protocols</Label>
+                      <Label>Have you discussed protocols with your provider if you go past your estimated due date?</Label>
                       <input
                         className={inputCls()}
                         placeholder="Induction plans, preferences…"
@@ -707,29 +721,29 @@ export default function IntakePage() {
                   </div>
 
                   <div>
-                    <Label>Partner&rsquo;s Role at Birth</Label>
+                    <Label>Please describe the role you envision for your partner at your birth.</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
-                      placeholder="How involved do you want your partner to be?"
+                      placeholder="Hands on, share doula support, etc."
                       {...register('partner_role_at_birth')}
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <Label>Additional Birth Attendees</Label>
+                      <Label>In addition to your partner, will there be anyone else at your birth?</Label>
                       <input
                         className={inputCls()}
-                        placeholder="Anyone else you'd like present"
+                        placeholder="If yes, how do you envision their role?"
                         {...register('additional_birth_attendees')}
                       />
                     </div>
                     <div>
-                      <Label>People NOT Wanted at Birth</Label>
+                      <Label>Is there anyone that you would not like present at your birth, or immediately following birth?</Label>
                       <input
                         className={inputCls()}
-                        placeholder="Anyone you'd prefer not be there"
+                        placeholder="Please list their names below."
                         {...register('people_not_at_birth')}
                       />
                     </div>
@@ -740,10 +754,10 @@ export default function IntakePage() {
               {/* ── Step 4: Support & Notes ─────────────────────────────────── */}
               {step === 4 && (
                 <div className="space-y-5">
-                  <SectionHeading>Support &amp; Concerns</SectionHeading>
+                  <SectionHeading>Support &amp; concerns</SectionHeading>
 
                   <div>
-                    <Label>Fears or Concerns About Birth</Label>
+                    <Label>Do you have any fears or concerns regarding this birth?</Label>
                     <textarea
                       className={inputCls()}
                       rows={3}
@@ -753,7 +767,7 @@ export default function IntakePage() {
                   </div>
 
                   <div>
-                    <Label>Religious / Cultural Beliefs or Practices</Label>
+                    <Label>Are there any religious or cultural beliefs I should be aware of regarding your birth?</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
@@ -763,7 +777,7 @@ export default function IntakePage() {
                   </div>
 
                   <div>
-                    <Label>What Has Been Comforting in Painful Situations?</Label>
+                    <Label>In previously painful or emotionally intense situations, what has been comforting?</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
@@ -773,7 +787,7 @@ export default function IntakePage() {
                   </div>
 
                   <div>
-                    <Label>How Can Doula Support Help You Most?</Label>
+                    <Label>Overall, how do you envision a doula's support being most helpful to you?</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
@@ -785,16 +799,16 @@ export default function IntakePage() {
                   <SectionHeading>Postpartum</SectionHeading>
 
                   <div>
-                    <Label>Nursing / Feeding Experience or Plans</Label>
+                    <Label>Do you have any experience with nursing?</Label>
                     <input
                       className={inputCls()}
-                      placeholder="Breastfeeding, formula, combination…"
+                      placeholder="If yes, tell me about it."
                       {...register('nursing_experience')}
                     />
                   </div>
 
                   <div>
-                    <Label>Concerns About Feeding</Label>
+                    <Label>Do you have any concerns about your ability to feed your baby?</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
@@ -804,7 +818,7 @@ export default function IntakePage() {
                   </div>
 
                   <div>
-                    <Label>Postpartum Support Available</Label>
+                    <Label>What kind of postpartum support will you have?</Label>
                     <textarea
                       className={inputCls()}
                       rows={2}
@@ -813,10 +827,10 @@ export default function IntakePage() {
                     />
                   </div>
 
-                  <SectionHeading>Additional Notes</SectionHeading>
+                  <SectionHeading>Additional notes</SectionHeading>
 
                   <div>
-                    <Label>Any Questions or Anything Else You&rsquo;d Like Me to Know?</Label>
+                    <Label>Any questions or anything else you'd like to share with me?</Label>
                     <textarea
                       className={inputCls()}
                       rows={4}
@@ -851,7 +865,17 @@ export default function IntakePage() {
                 {step < TOTAL_STEPS ? (
                   <button
                     type="button"
-                    onClick={() => setStep(s => s + 1)}
+                    onClick={async () => {
+                      const stepFields: Record<number, (keyof FormValues)[]> = {
+                        1: ['name', 'address', 'email', 'phone'],
+                      };
+                      const fields = stepFields[step];
+                      if (fields) {
+                        const valid = await trigger(fields);
+                        if (!valid) return;
+                      }
+                      setStep(s => s + 1);
+                    }}
                     className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors"
                   >
                     Next <ChevronRight className="h-4 w-4" />
