@@ -12,6 +12,8 @@
 - Deployed at app.laquintanadoulacare.com
 
 ## Phase 2 — Business Tools
+- all intake form data should be stored in supabase under new table
+- ability to edit the intake form using the new client_intake_form table
 - Invoice generation (PDF template)
 - Email invoices and documents via Resend API. 
 - the email services should be structured in a way that migrating from Resend to Mailgun for multi-doula /org support will be easy.
@@ -25,6 +27,7 @@
   - Appointments this week
   - Clients by status
 - Stripe payment integration
+- "Clear Client" feature to wipe out sensative client data while keeping relevant data for insights dashboard (data fields still to be defined)
 
 ## Phase 3 — Client Portal (Web)
 - Client login via app.laquintanadoulacare.com

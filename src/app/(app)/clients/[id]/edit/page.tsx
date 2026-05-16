@@ -10,13 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { clientSchema, type ClientFormValues, SERVICE_TYPES, SERVICE_TYPE_LABELS, CLIENT_STATUSES } from '@/features/clients/types';
+import { clientSchema, type ClientFormValues, CLIENT_STATUSES } from '@/features/clients/types';
 import { listPackages, type PackageSummary } from '@/features/packages/api/packages.api';
 import { listAddOns, type AddOn } from '@/features/add-ons/api/add_ons.api';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/auth-context';
-import { ArrowLeft, User, Baby, Package, FileText } from 'lucide-react';
-import clsx from 'clsx';
+import { ArrowLeft, User, Baby, Package } from 'lucide-react';
 
 export default function EditClientPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
@@ -44,8 +43,7 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
     },
   });
 
-  const { register, handleSubmit, formState: { errors }, watch, setValue } = form;
-  const watchedServiceTypes = watch('service_types') ?? [];
+  const { register, handleSubmit, formState: { errors }, watch } = form;
   const clientName = watch('name');
 
   useEffect(() => {
@@ -113,14 +111,6 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  function toggleServiceType(type: string) {
-    const current = watch('service_types') ?? [];
-    setValue('service_types',
-      current.includes(type) ? current.filter((t) => t !== type) : [...current, type],
-      { shouldDirty: true }
-    );
-  }
-
   async function onSubmit(data: ClientFormValues) {
     setError(null);
     setSuccess(false);
@@ -160,16 +150,22 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
       }
 
       // Replace client add-ons: delete existing then insert current selections
-      await supabase.from('client_add_ons').delete().eq('client_id', id);
+      const { error: deleteAddOnsError } = await supabase
+        .from('client_add_ons').delete().eq('client_id', id);
+      if (deleteAddOnsError) throw deleteAddOnsError;
+
       if (selectedAddOns.length > 0) {
-        await supabase.from('client_add_ons').insert(
-          selectedAddOns.map(a => ({
-            client_id: id,
-            add_on_id: a.addOnId,
-            quantity:  a.quantity,
-            org_id:    orgId,
-          }))
-        );
+        const { error: insertAddOnsError } = await supabase
+          .from('client_add_ons')
+          .insert(
+            selectedAddOns.map(a => ({
+              client_id: id,
+              add_on_id: a.addOnId,
+              quantity:  a.quantity,
+              org_id:    orgId,
+            }))
+          );
+        if (insertAddOnsError) throw insertAddOnsError;
       }
 
       await Promise.all([
@@ -250,26 +246,6 @@ export default function EditClientPage({ params }: { params: Promise<{ id: strin
               <div className="space-y-1.5"><Label>Estimated Due Date</Label><Input type="date" {...register('due_date')} /></div>
               <div className="space-y-1.5"><Label>LMP</Label><Input type="date" {...register('lmp')} /></div>
               <div className="space-y-1.5 md:col-span-2"><Label>Pregnancy Stage</Label><Input {...register('pregnancy_stage')} /></div>
-            </div>
-          </section>
-
-          <section>
-            <div className="flex items-center gap-2 mb-4">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Service Types</h2>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {SERVICE_TYPES.map((type) => {
-                const selected = watchedServiceTypes.includes(type);
-                return (
-                  <button key={type} type="button" onClick={() => toggleServiceType(type)}
-                    className={clsx('rounded-full px-3 py-1.5 text-sm font-medium border transition-colors',
-                      selected ? 'bg-primary text-primary-foreground border-primary'
-                               : 'bg-background text-muted-foreground border-border hover:border-foreground/50')}>
-                    {SERVICE_TYPE_LABELS[type]}
-                  </button>
-                );
-              })}
             </div>
           </section>
 

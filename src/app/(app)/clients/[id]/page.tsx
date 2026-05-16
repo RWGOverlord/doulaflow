@@ -20,6 +20,7 @@ import {
   type Document as DocType, type DocumentCategory, type DocumentVisibility,
 } from '@/features/documents/api/documents.api';
 import { useAuth } from '@/lib/auth-context';
+import { BirthDetailsTab } from '@/features/clients/components/BirthDetailsTab';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import clsx from 'clsx';
@@ -1159,12 +1160,23 @@ function IntakeLinkModal({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const TABS = ['appointments', 'notes', 'documents', 'packages', 'add-ons', 'tasks'] as const;
+const TABS = ['appointments', 'notes', 'documents', 'packages', 'add-ons', 'tasks', 'birth'] as const;
 type Tab = typeof TABS[number];
+
+const TAB_LABELS: Record<Tab, string> = {
+  appointments: 'Appointments',
+  notes:        'Notes',
+  documents:    'Documents',
+  packages:     'Packages',
+  'add-ons':    'Add-ons',
+  tasks:        'Tasks',
+  birth:        'Birth Details',
+};
 
 export default function ClientCasePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
   const router  = useRouter();
+  const { user } = useAuth();
   const { data: client, isLoading, error } = useClientProfile(id);
   const [activeTab,       setActiveTab]       = useState<Tab>('appointments');
   const [modalOpen,       setModalOpen]       = useState(false);
@@ -1269,16 +1281,16 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
 
         {/* Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex border-b px-6 bg-background">
+          <div className="flex border-b px-6 bg-background overflow-x-auto">
             {TABS.map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={clsx(
-                  'px-4 py-3 text-sm font-medium border-b-2 transition-colors capitalize',
+                  'px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap',
                   activeTab === tab
                     ? 'border-primary text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 )}>
-                {tab}
+                {TAB_LABELS[tab]}
               </button>
             ))}
           </div>
@@ -1290,6 +1302,13 @@ export default function ClientCasePage({ params }: { params: Promise<{ id: strin
             {activeTab === 'packages'     && <PackagesTab clientId={id} />}
             {activeTab === 'add-ons'      && <AddOnsTab clientId={id} />}
             {activeTab === 'tasks'        && <TasksTab clientId={id} />}
+            {activeTab === 'birth'        && (
+              <BirthDetailsTab
+                clientId={id}
+                doulaId={user?.id    ?? ''}
+                orgId={user?.orgId   ?? ''}
+              />
+            )}
           </div>
         </div>
       </div>

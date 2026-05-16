@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/auth-context';
-import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from '../types';
 import clsx from 'clsx';
 
 // ─── Schema ───────────────────────────────────────────────────────────────────
@@ -26,7 +25,6 @@ const schema = z.object({
   phone:         z.string().optional().or(z.literal('')),
   dueDate:       z.string().optional().or(z.literal('')),
   lmp:           z.string().optional().or(z.literal('')),
-  serviceTypes:  z.array(z.string()).default([]),
   packageId:     z.string().optional(),
   notes:         z.string().optional(),
 });
@@ -87,31 +85,21 @@ export default function NewClientWizard() {
     resolver: zodResolver(schema),
     defaultValues: {
       firstName: '', lastName: '', email: '', phone: '',
-      dueDate: '', lmp: '', serviceTypes: [], packageId: undefined, notes: '',
+      dueDate: '', lmp: '', packageId: undefined, notes: '',
     },
     mode: 'onChange',
   });
 
-  const { register, handleSubmit, formState: { errors }, watch, setValue } = form;
+  const { register, handleSubmit, formState: { errors }, watch } = form;
 
   React.useEffect(() => {
     listPackages().then(setPackages).catch(console.error);
     listAddOns().then(setAddOns).catch(console.error);
   }, []);
 
-  const watchedServiceTypes = watch('serviceTypes');
-  const watchedPackageId    = watch('packageId');
+  const watchedPackageId = watch('packageId');
   const selectedPkg         = packages.find((p) => p.id === watchedPackageId);
   const fullName            = `${watch('firstName')} ${watch('lastName')}`.trim();
-
-  function toggleServiceType(type: string) {
-    const current = watch('serviceTypes') ?? [];
-    setValue(
-      'serviceTypes',
-      current.includes(type) ? current.filter((t) => t !== type) : [...current, type],
-      { shouldDirty: true }
-    );
-  }
 
   function toggleAddOn(addOnId: number) {
     setSelectedAddOns(prev =>
@@ -145,11 +133,7 @@ export default function NewClientWizard() {
         return;
       }
 
-      // Merge service_types: selected types + any tags from chosen package
-      const pkgTags = selectedPkg?.tags ?? [];
-      const mergedTypes = [
-        ...new Set([...values.serviceTypes, ...pkgTags]),
-      ];
+      const mergedTypes = selectedPkg?.tags ?? [];
 
       // 1) Insert client
       const { data: client, error: clientError } = await supabase
@@ -272,32 +256,6 @@ export default function NewClientWizard() {
             </div>
           </div>
 
-          {/* Service types multi-select */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Service Types</label>
-            <p className="text-xs text-muted-foreground">Select all that apply</p>
-            <div className="flex flex-wrap gap-2">
-              {SERVICE_TYPES.map((type) => {
-                const selected = watchedServiceTypes?.includes(type);
-                return (
-                  <button
-                    key={type}
-                    type="button"
-                    onClick={() => toggleServiceType(type)}
-                    className={clsx(
-                      'rounded-full px-3 py-1.5 text-sm font-medium border transition-colors',
-                      selected
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-background text-muted-foreground border-border hover:border-foreground'
-                    )}
-                  >
-                    {SERVICE_TYPE_LABELS[type]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Notes</label>
             <Textarea {...register('notes')} placeholder="Initial notes about this client..." rows={3} />
@@ -402,12 +360,6 @@ export default function NewClientWizard() {
               <div><span className="text-muted-foreground">Email: </span>{watch('email') || '—'}</div>
               <div><span className="text-muted-foreground">Phone: </span>{watch('phone') || '—'}</div>
               <div><span className="text-muted-foreground">Due Date: </span>{watch('dueDate') || '—'}</div>
-              <div className="sm:col-span-2">
-                <span className="text-muted-foreground">Services: </span>
-                {watchedServiceTypes?.length
-                  ? watchedServiceTypes.map(t => SERVICE_TYPE_LABELS[t as keyof typeof SERVICE_TYPE_LABELS] ?? t).join(', ')
-                  : '—'}
-              </div>
               <div className="sm:col-span-2">
                 <span className="text-muted-foreground">Package: </span>
                 {selectedPkg?.name || '— None —'}

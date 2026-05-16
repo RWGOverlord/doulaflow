@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Users, Calendar, DollarSign, TrendingUp } from 'lucide-react';
+import { Users, Calendar, DollarSign, TrendingUp, ShoppingCart, Wallet } from 'lucide-react';
 import { getDoulaId } from '@/lib/getDoulaId';
 import clsx from 'clsx';
 
@@ -23,11 +23,13 @@ type PackageRow = {
 };
 
 type InsightsData = {
-  totalClients: number;
+  totalClients:    number;
   clientsByStatus: StatusCount[];
-  upcomingAppts: UpcomingAppt[];
-  activeRevenue: number;
-  totalRevenue: number;
+  upcomingAppts:   UpcomingAppt[];
+  activeRevenue:   number;
+  pkgRevenue:      number;
+  addOnRevenue:    number;
+  totalRevenue:    number;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -109,8 +111,20 @@ export default function InsightsPage() {
         const doulaId = await getDoulaId();
         const { start, end } = weekBounds();
 
-        const [clientsRes, apptsRes, packagesRes] = await Promise.all([
-          supabase.from('clients').select('status').eq('doula_id', doulaId),
+        // Step 1: clients — need IDs to filter add-ons (no doula_id on client_add_ons)
+        const clientsRes = await supabase
+          .from('clients').select('id, status').eq('doula_id', doulaId);
+        if (!mounted) return;
+
+        const clients   = (clientsRes.data ?? []) as { id: string; status: string }[];
+        const clientIds = clients.map(c => c.id);
+
+        // Step 2: parallel queries
+        const addOnsQuery = clientIds.length > 0
+          ? supabase.from('client_add_ons').select('quantity, add_ons(price)').in('client_id', clientIds)
+          : Promise.resolve({ data: [] as any[], error: null });
+
+        const [apptsRes, packagesRes, addOnsRes] = await Promise.all([
           supabase
             .from('appointments')
             .select('id, starts_at, clients(name), appointment_types(name)')
@@ -122,12 +136,12 @@ export default function InsightsPage() {
             .from('client_packages')
             .select('is_active, packages(price)')
             .eq('doula_id', doulaId),
+          addOnsQuery,
         ]);
 
         if (!mounted) return;
 
         // Clients by status
-        const clients = clientsRes.data ?? [];
         const statusMap: Record<string, number> = {};
         for (const c of clients) {
           statusMap[c.status] = (statusMap[c.status] ?? 0) + 1;
@@ -136,20 +150,27 @@ export default function InsightsPage() {
           .map(([status, count]) => ({ status, count }))
           .sort((a, b) => b.count - a.count);
 
-        // Revenue
+        // Package revenue
         const pkgs = (packagesRes.data ?? []) as unknown as PackageRow[];
         const activeRevenue = pkgs
           .filter(p => p.is_active)
           .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
-        const totalRevenue = pkgs
+        const pkgRevenue = pkgs
           .reduce((sum, p) => sum + (p.packages?.price ?? 0), 0);
+
+        // Add-on revenue: sum(quantity × price)
+        const addOns = (addOnsRes.data ?? []) as { quantity: number; add_ons: { price: number | null } | null }[];
+        const addOnRevenue = addOns
+          .reduce((sum, a) => sum + a.quantity * (a.add_ons?.price ?? 0), 0);
 
         setData({
           totalClients:    clients.length,
           clientsByStatus,
           upcomingAppts:   (apptsRes.data ?? []) as unknown as UpcomingAppt[],
           activeRevenue,
-          totalRevenue,
+          pkgRevenue,
+          addOnRevenue,
+          totalRevenue:    pkgRevenue + addOnRevenue,
         });
         setLoading(false);
       } catch (err) {
@@ -178,7 +199,7 @@ export default function InsightsPage() {
         ) : data && (
           <>
             {/* Stat cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <StatCard
                 icon={Users}
                 label="Total Clients"
@@ -202,9 +223,23 @@ export default function InsightsPage() {
               <StatCard
                 icon={TrendingUp}
                 label="Total Package Revenue"
-                value={fmtCurrency(data.totalRevenue)}
+                value={fmtCurrency(data.pkgRevenue)}
                 sub="all packages combined"
                 color="bg-amber-500"
+              />
+              <StatCard
+                icon={ShoppingCart}
+                label="Add-on Revenue"
+                value={fmtCurrency(data.addOnRevenue)}
+                sub="all add-ons combined"
+                color="bg-pink-500"
+              />
+              <StatCard
+                icon={Wallet}
+                label="Total Revenue"
+                value={fmtCurrency(data.totalRevenue)}
+                sub="packages + add-ons"
+                color="bg-indigo-500"
               />
             </div>
 

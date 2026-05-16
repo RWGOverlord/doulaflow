@@ -1,7 +1,8 @@
 # DoulaFlow — Tasks
 
 ## In Progress
-
+# Add missing placeholder in settings
+- add placeholder UI for Profile and Notifications in the Settings page
 
 ## Todo — Phase 1 Cleanup
 
